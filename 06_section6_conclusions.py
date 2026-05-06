@@ -203,7 +203,7 @@ This replication implements the Fama-French (1993) methodology using publicly av
 | SMB | Small minus Big | Average return on small portfolios minus big portfolios (3 size x 2 BE/ME sorts) from Ken French Data Library |
 | HML | High minus Low | Average return on high BE/ME portfolios minus low BE/ME portfolios (2 size x 3 BE/ME sorts) from Ken French Data Library |
 | TERM | Term spread proxy | Difference between long-term and short-term government yields from FRED |
-| DEF | Default spread proxy | Difference between corporate and government yields from FRED |
+| DEF | Default spread (BAA-AAA) | BAA-AAA corporate bond yield spread from FRED (BAA minus AAA) |
 
 ### Portfolio Data
 
