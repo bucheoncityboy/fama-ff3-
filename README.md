@@ -154,17 +154,62 @@ pytest tests/ -v
 
 ---
 
-## 6. 데이터 출처
+## 6. 데이터 출처 (Data Sources)
 
-- **Ken French Data Library**: https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
-  - Fama-French 3 Factors (월간)
-  - 25 Portfolios formed on Size and Book-to-Market (5×5, 월간)
-  - Risk-Free Rate (월간)
-- **FRED (Federal Reserve Economic Data)**: https://fred.stlouisfed.org/
-  - `GS10` — 10-Year Treasury Constant Maturity Rate
-  - `TB3MS` — 3-Month Treasury Bill Secondary Market Rate
-  - `BAA` — Moody's Seasoned Baa Corporate Bond Yield
-  - `AAA` — Moody's Seasoned Aaa Corporate Bond Yield
+### 6.1 주식 데이터: Ken French Data Library
+- **Base URL**: `https://mba.tuck.dartmouth.edu/pages/Faculty/ken.french/ftp/`
+- **Download method**: `download_data.py` uses `urllib` to download ZIP files, then extracts CSVs
+- **Files used**:
+  1. **F-F_Research_Data_Factors_CSV.zip**
+     - Contents: Fama-French 3 Factors (월간) + Risk-Free Rate
+     - Columns: `Mkt-RF`, `SMB`, `HML`, `RF`
+     - Format: CSV inside ZIP, skip first 3 rows (header rows)
+     - Saved locally as: `data/ff_factors.csv`
+  2. **6_Portfolios_2x3_CSV.zip**
+     - Contents: 6 portfolios formed on Size and Book-to-Market (2×3)
+     - Used for: constructing SMB and HML factors
+     - Format: CSV inside ZIP, skip first 12 rows
+     - Saved locally as: `data/ff_6_portfolios.csv`
+  3. **25_Portfolios_5x5_CSV.zip**
+     - Contents: 25 portfolios formed on Size and BE/ME (5×5)
+     - Used for: regression test assets (Table 1-5)
+     - Format: CSV inside ZIP, skip first 12 rows
+     - Saved locally as: `data/ff_25_portfolios.csv`
+- **Parser**: `ken_french_parser.py` handles value-weighted (`vw`) returns, skips header rows, parses dates
+
+### 6.2 채권 요인 데이터: FRED (Federal Reserve Economic Data)
+- **API**: `pandas_datareader.DataReader` with `data_source='fred'`
+- **Series used**:
+  1. **GS10** — 10-Year Treasury Constant Maturity Rate
+     - Description: 미국 10년 만기 국채 변동수익률 (월간 평균)
+     - Frequency: Monthly
+     - Units: Percent (annualized)
+     - Used for: TERM factor (long-term yield component)
+  2. **TB3MS** — 3-Month Treasury Bill Secondary Market Rate
+     - Description: 미국 3개월 만기 국채 수익률 (월간 평균)
+     - Frequency: Monthly
+     - Units: Percent (annualized)
+     - Used for: TERM factor (short-term yield component) and risk-free rate proxy
+  3. **BAA** — Moody's Seasoned Baa Corporate Bond Yield
+     - Description: Moody's Baa 등급 회사채 수익률 (월간 평균)
+     - Frequency: Monthly
+     - Units: Percent (annualized)
+     - Source period: 1919-01 to present
+     - Used for: DEF factor (high-yield corporate component)
+  4. **AAA** — Moody's Seasoned Aaa Corporate Bond Yield
+     - Description: Moody's Aaa 등급 회사채 수익률 (월간 평균)
+     - Frequency: Monthly
+     - Units: Percent (annualized)
+     - Source period: 1919-01 to present
+     - Used for: DEF factor (investment-grade corporate component)
+- **Saved locally**: `data/bond_factors.csv` (columns: `Date`, `TERM`, `DEF`)
+- **Computation**:
+  - `TERM = GS10 - TB3MS` (term spread in decimal monthly terms)
+  - `DEF = BAA - AAA` (credit spread in decimal monthly terms)
+
+### 6.3 데이터 한계 및 대체
+- **CRSP 채권 데이터 접근 불가**: 원 논문은 CRSP의 월간 채권 포트폴리오 수익률 데이터를 사용했으나, 이는 상용 라이선스가 필요하며 공개적으로 접근할 수 없다. 본 복제는 이를 FRED의 수익률(yield) 데이터로 대체하여 프록시를 구성한다.
+- **데이터 저장 위치**: 모든 원본 및 가공 데이터는 `data/` 디렉토리에 CSV 형태로 저장된다.
 
 ---
 
