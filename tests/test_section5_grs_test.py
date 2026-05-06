@@ -187,6 +187,15 @@ class TestGRSStatistics:
             f"Bond 2-factor p ({bond_p:.4f}) should be > stock 3-factor p ({stock_3f_p:.4f})"
         )
 
+    def test_bond_2factor_not_rejected(self, grs_df):
+        """
+        Bond 2-factor GRS should not be strongly rejected (p > 0.05).
+        """
+        row = grs_df[grs_df["test_name"] == "Bonds_2Factor"].iloc[0]
+        assert row["p_value"] > 0.05, (
+            f"Bond 2-factor GRS should not be rejected (p>0.05), got p={row['p_value']:.4f}"
+        )
+
     def test_all_5factor_grs_significant(self, grs_df):
         """
         Joint test on all 32 portfolios should generally reject.

@@ -152,25 +152,23 @@ def test_summary_statistics_printed(capsys):
 
 def test_term_mean_approximate(run_script):
     """
-    TERM mean is approximately 0.06%/month (0.0006 in decimal) or at least
-    within a reasonable range for yield-based proxies.
+    TERM mean should be positive (~1.25% annualized term spread) for the
+    full-sample 1963-1991 period with yield-based proxies.
     """
     df = _read_output_csv(run_script)
     if "TERM" not in df.columns:
         pytest.skip("TERM not in output")
     mean_term = df["TERM"].mean()
-    # Allow a wide tolerance because the data is yield-based and limited
-    assert -0.005 <= mean_term <= 0.005, f"TERM mean {mean_term} outside reasonable range"
+    assert 0.005 < mean_term < 0.03, f"TERM mean {mean_term} outside expected positive range"
 
 
 def test_def_mean_approximate(run_script):
     """
-    DEF mean is approximately 0.02%/month (0.0002 in decimal) or at least
-    within a reasonable range for yield-based proxies.
+    DEF mean should be positive (~1.1% annualized credit spread) for the
+    full-sample 1963-1991 period with yield-based proxies.
     """
     df = _read_output_csv(run_script)
     if "DEF" not in df.columns:
         pytest.skip("DEF not in output")
     mean_def = df["DEF"].mean()
-    # Allow a wide tolerance because the data is yield-based and limited
-    assert -0.02 <= mean_def <= 0.02, f"DEF mean {mean_def} outside reasonable range"
+    assert 0.005 < mean_def < 0.03, f"DEF mean {mean_def} outside expected positive range"

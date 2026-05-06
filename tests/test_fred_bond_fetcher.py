@@ -4,13 +4,29 @@ RED test: Verify fred_bond_fetcher structure, behavior, and error handling
 """
 
 import os
+import shutil
 import sys
-import pytest
+
 import pandas as pd
-from datetime import datetime
+import pytest
+
+import config
 
 # Ensure project root is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+@pytest.fixture(autouse=True, scope="module")
+def preserve_bond_factors():
+    """Backup and restore data/bond_factors.csv to prevent cross-test pollution."""
+    original_path = os.path.join(config.DATA_DIR, "bond_factors.csv")
+    backup_path = os.path.join(config.DATA_DIR, "bond_factors_backup.csv")
+    if os.path.exists(original_path):
+        shutil.copy2(original_path, backup_path)
+    yield
+    if os.path.exists(backup_path):
+        shutil.copy2(backup_path, original_path)
+        os.remove(backup_path)
 
 
 def test_module_imports():
@@ -121,6 +137,22 @@ def test_date_range_filtering():
     df = fetch_bond_data(start=start, end=end)
     assert df.index.min() >= pd.Timestamp(start)
     assert df.index.max() <= pd.Timestamp(end)
+
+
+def test_def_mean_positive():
+    """DEF mean should be positive (credit spread) and within expected range."""
+    from fred_bond_fetcher import fetch_bond_data
+    df = fetch_bond_data(start='2020-01-01', end='2020-12-31')
+    mean_def = df['DEF'].mean()
+    assert 0.005 < mean_def < 0.03, f"DEF mean {mean_def} outside expected positive range"
+
+
+def test_term_mean_positive():
+    """TERM mean should be positive (term spread) and within expected range."""
+    from fred_bond_fetcher import fetch_bond_data
+    df = fetch_bond_data(start='2020-01-01', end='2020-12-31')
+    mean_term = df['TERM'].mean()
+    assert 0.005 < mean_term < 0.03, f"TERM mean {mean_term} outside expected positive range"
 
 
 def test_disclaimer_in_output():
