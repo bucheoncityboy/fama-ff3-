@@ -7,8 +7,9 @@ These bond portfolio returns are YIELD-BASED PROXIES constructed from FRED data,
 NOT actual historical total returns as used in the original Fama-French paper.
 The 7 bond portfolios (Short-term Government, Long-term Government, AAA, AA, A,
 BBB, and Low-Grade corporate bonds) are approximated using Treasury yields and
-the DEF (default spread) factor. Numerical results will differ substantially from
-the original paper which used actual corporate bond return data from Ibbotson.
+the DEF (BAA-AAA corporate bond yield spread, credit spread proxy) factor.
+Numerical results will differ substantially from the original paper which used
+actual corporate bond return data from Ibbotson.
 
 PROXY METHODOLOGY:
 - Government bond excess returns: yield spread (10Y Treasury - 3M Treasury)
@@ -20,6 +21,12 @@ PROXY METHODOLOGY:
 - A corporate: DGS10 + 0.6*DEF - TB3MS
 - BBB corporate: DGS10 + 0.8*DEF - TB3MS
 - Low-Grade (BBB-): DGS10 + DEF - TB3MS
+
+DEF represents the BAA-AAA corporate bond yield spread (credit spread proxy),
+measured as the difference between Moody's Baa and Aaa yields. In decimal
+monthly terms, DEF is approximately ~0.001 (1.2% annualized). The formulas
+above combine the term premium (DGS10 - TB3MS) with a credit premium scaled
+by rating quality.
 
 These approximations assume:
 1. Yield changes approximate bond returns (duration effect)
@@ -223,7 +230,7 @@ def create_bond_portfolios(start=None, end=None):
     long_term = yields_df['gs10'] - rf
 
     # Corporate bond proxies using DEF factor
-    # DEF represents corporate - government yield spread
+    # DEF represents the BAA-AAA corporate bond yield spread (credit spread proxy)
     # Scale DEF by credit quality: AAA gets smallest fraction, Low-grade gets full DEF
 
     # Reindex DEF to match yields_df index for proper alignment
@@ -256,6 +263,10 @@ def create_bond_portfolios(start=None, end=None):
         'BBB': bbb,
         'LOW_GRADE': low_grade,
     })
+
+    # Convert annualized yield spreads to monthly decimals for consistency
+    # with monthly return conventions (FRED yields are annual percentages)
+    portfolios_df = portfolios_df / 12.0
 
     # Drop rows with NaN (from factor alignment)
     portfolios_df = portfolios_df.dropna()
@@ -302,8 +313,9 @@ def create_bond_portfolios(start=None, end=None):
         print("      The original data (1963-1991) is not available from FRED.")
     print("="*70)
     print("\nNOTE: These are YIELD-BASED PROXIES, not actual bond returns.")
-    print("      Expected excess returns should be near zero as yields are")
-    print("      mean-reverting and don't capture capital gains/losses.")
+    print("      Expected excess returns reflect yield spreads (small positive)")
+    print("      rather than actual total returns. Yields are mean-reverting")
+    print("      and don't capture capital gains/losses.")
     print("="*70 + "\n")
 
     return portfolios_df
