@@ -912,3 +912,72 @@ class TestPortfolioConstructor:
         big_mean_me = assigned.loc[assigned['portfolio'].isin(big_labels), 'me'].mean()
 
         assert small_mean_me < big_mean_me
+
+    def test_compute_nyse_breakpoints_2x3_me(self):
+        """Test ME 2×3 breakpoint returns median from NYSE non-financial."""
+        constructor = self._constructor()
+        bp_df = self._breakpoint_df()
+        # NYSE non-financial ME values: 10, 20, 30, 40, 50 (exchange=1, not financial)
+        # Median of 5 values is the 3rd sorted value
+        breakpoints = constructor.compute_nyse_breakpoints_2x3(bp_df, metric='me')
+        assert len(breakpoints) == 1
+        assert breakpoints[0] == pytest.approx(30.0)
+
+    def test_compute_nyse_breakpoints_2x3_beme(self):
+        """Test BE/ME 2×3 breakpoints return 30th and 70th percentiles from NYSE non-financial."""
+        constructor = self._constructor()
+        bp_df = self._breakpoint_df()
+        # NYSE non-financial BE/ME values: 0.1, 0.2, 0.3, 0.4, 0.5
+        breakpoints = constructor.compute_nyse_breakpoints_2x3(bp_df, metric='beme')
+        assert len(breakpoints) == 2
+        assert breakpoints[0] == pytest.approx(0.22)  # 30th percentile
+        assert breakpoints[1] == pytest.approx(0.38)  # 70th percentile
+
+    def test_assign_portfolios_2x3(self):
+        """Test stocks are assigned to 6 Ken French portfolio labels."""
+        df = pd.DataFrame({
+            'me': [10.0, 50.0, 100.0, 10.0, 50.0, 100.0, 25.0, 25.0],
+            'beme': [0.1, 0.1, 0.1, 0.9, 0.9, 0.9, 0.3, 0.7],
+        })
+        constructor = self._constructor()
+        size_bp = [40.0]  # median
+        beme_bps = [0.2, 0.6]  # 30th and 70th
+
+        labels = constructor.assign_portfolios_2x3(df, size_bp, beme_bps)
+
+        # me=10 < 40 -> SMALL, beme=0.1 < 0.2 -> LoBM => SMALL LoBM
+        assert labels.iloc[0] == 'SMALL LoBM'
+        # me=50 > 40 -> BIG, beme=0.1 < 0.2 -> LoBM => BIG LoBM
+        assert labels.iloc[1] == 'BIG LoBM'
+        # me=100 > 40 -> BIG, beme=0.1 < 0.2 -> LoBM => BIG LoBM
+        assert labels.iloc[2] == 'BIG LoBM'
+        # me=10 < 40 -> SMALL, beme=0.9 > 0.6 -> HiBM => SMALL HiBM
+        assert labels.iloc[3] == 'SMALL HiBM'
+        # me=50 > 40 -> BIG, beme=0.9 > 0.6 -> HiBM => BIG HiBM
+        assert labels.iloc[4] == 'BIG HiBM'
+        # me=100 > 40 -> BIG, beme=0.9 > 0.6 -> HiBM => BIG HiBM
+        assert labels.iloc[5] == 'BIG HiBM'
+        # me=25 < 40 -> SMALL, beme=0.3 between 0.2 and 0.6 -> BM2 => ME1 BM2
+        assert labels.iloc[6] == 'ME1 BM2'
+        # me=25 < 40 -> SMALL, beme=0.7 between 0.2 and 0.6 -> BM2 => ME1 BM2
+        # Actually 0.7 > 0.6 -> HiBM => SMALL HiBM
+        assert labels.iloc[7] == 'SMALL HiBM'
+
+    def test_build_6_portfolios_synthetic(self):
+        """Test full synthetic 6-portfolio pipeline returns 12 months by 6 columns."""
+        beme_df = self._full_beme_df()
+        crsp_df = self._full_crsp_df(beme_df)
+        constructor = self._constructor(beme_df, crsp_df)
+
+        portfolios = constructor.build_6_portfolios()
+
+        assert portfolios.shape == (12, 6)
+        expected_columns = constructor.PORTFOLIO_COLUMNS_6
+        assert list(portfolios.columns) == expected_columns
+        assert portfolios.index.name == 'Date'
+        assert portfolios.index[0] == '1964-07'
+        assert portfolios.index[-1] == '1965-06'
+        # Verify value-weighted returns are non-NaN and in expected range
+        assert portfolios.notna().all().all()
+        assert (portfolios > -100).all().all()
+        assert (portfolios < 100).all().all()

@@ -589,6 +589,20 @@ class PortfolioConstructor:
         (5, 4): 'ME5 BM4', (5, 5): 'BIG HiBM',
     }
 
+    PORTFOLIO_COLUMNS_6 = [
+        'SMALL LoBM', 'ME1 BM2', 'SMALL HiBM',
+        'BIG LoBM', 'ME2 BM2', 'BIG HiBM',
+    ]
+
+    PORTFOLIO_LABELS_6 = {
+        (1, 1): 'SMALL LoBM',
+        (1, 2): 'ME1 BM2',
+        (1, 3): 'SMALL HiBM',
+        (2, 1): 'BIG LoBM',
+        (2, 2): 'ME2 BM2',
+        (2, 3): 'BIG HiBM',
+    }
+
     def __init__(self, beme_calculator=None, crsp_source=None):
         """
         Initialize PortfolioConstructor.
@@ -663,6 +677,146 @@ class PortfolioConstructor:
             labels.append(self.PORTFOLIO_LABELS[(size_group, beme_group)])
 
         return pd.Series(labels, index=beme_df.index, dtype='object')
+
+    def compute_nyse_breakpoints_2x3(self, beme_df: pd.DataFrame, metric: str = 'me') -> List[float]:
+        """
+        Compute NYSE non-financial breakpoints for 2×3 portfolios.
+
+        For 'me': returns [median] (50th percentile of NYSE ME).
+        For 'beme': returns [p30, p70] (30th and 70th percentiles of NYSE BE/ME).
+
+        Args:
+            beme_df: Annual BE/ME snapshot for one June formation year.
+            metric: Either 'me' for size or 'beme' for book-to-market.
+
+        Returns:
+            For 'me': list with one breakpoint [median].
+            For 'beme': list with two breakpoints [p30, p70].
+        """
+        if metric not in {'me', 'beme'}:
+            raise ValueError("metric must be either 'me' or 'beme'")
+
+        if beme_df is None or beme_df.empty:
+            return [np.nan] if metric == 'me' else [np.nan, np.nan]
+
+        df = beme_df.copy()
+        values = pd.to_numeric(df[metric], errors='coerce')
+        exchange = pd.to_numeric(df.get('exchange', pd.Series(index=df.index, dtype='float64')), errors='coerce')
+        financial = df.get('is_financial', pd.Series(False, index=df.index)).fillna(False).astype(bool)
+
+        nyse = values[(exchange == 1) & (~financial) & values.notna() & np.isfinite(values)]
+        if nyse.empty:
+            return [np.nan] if metric == 'me' else [np.nan, np.nan]
+
+        if metric == 'me':
+            return [float(nyse.quantile(0.5))]
+        else:
+            return [float(nyse.quantile(0.3)), float(nyse.quantile(0.7))]
+
+    def assign_portfolios_2x3(self, beme_df: pd.DataFrame, size_bp: List[float], beme_bps: List[float]) -> pd.Series:
+        """
+        Assign all stocks to 6 Size-BE/ME portfolios using NYSE breakpoints.
+
+        Size: 2 groups based on median (below = SMALL, above = BIG).
+        BE/ME: 3 groups (below p30 = LoBM, between p30-p70 = BM2, above p70 = HiBM).
+
+        Args:
+            beme_df: Annual BE/ME snapshot for one June formation year.
+            size_bp: ME breakpoints from compute_nyse_breakpoints_2x3(..., 'me').
+            beme_bps: BE/ME breakpoints from compute_nyse_breakpoints_2x3(..., 'beme').
+
+        Returns:
+            Series of Ken French style 6-portfolio labels.
+        """
+        if beme_df is None or beme_df.empty:
+            return pd.Series(dtype='object')
+
+        size_bp_arr = np.asarray(size_bp, dtype='float64')
+        beme_bps_arr = np.asarray(beme_bps, dtype='float64')
+
+        me_values = pd.to_numeric(beme_df['me'], errors='coerce')
+        beme_values = pd.to_numeric(beme_df['beme'], errors='coerce')
+
+        labels = []
+        invalid_breaks = np.isnan(size_bp_arr).any() or np.isnan(beme_bps_arr).any()
+        for me_value, beme_value in zip(me_values, beme_values):
+            if invalid_breaks or pd.isna(me_value) or pd.isna(beme_value):
+                labels.append(pd.NA)
+                continue
+
+            size_group = int(np.searchsorted(size_bp_arr, me_value, side='left') + 1)
+            beme_group = int(np.searchsorted(beme_bps_arr, beme_value, side='left') + 1)
+            labels.append(self.PORTFOLIO_LABELS_6[(size_group, beme_group)])
+
+        return pd.Series(labels, index=beme_df.index, dtype='object')
+
+    def build_6_portfolios(self, beme_df: Optional[pd.DataFrame] = None, crsp_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        """
+        Build value-weighted monthly returns for 6 Size-BE/ME portfolios (2×3).
+
+        Same structure as build_25_portfolios but with 2×3 assignment.
+        NYSE breakpoints: Size = median (50%), BE/ME = 30th and 70th percentiles.
+        All stocks are assigned; returns are value-weighted.
+
+        Args:
+            beme_df: Optional annual June BE/ME snapshot. If omitted, BEMECalculator is used.
+            crsp_df: Optional CRSP monthly returns. If omitted, CRSPSource is used.
+
+        Returns:
+            DataFrame indexed by YYYY-MM strings with 6 portfolio return columns.
+            Returns are expressed in percent to match Ken French CSV files.
+        """
+        beme = self.beme_calculator.compute_all() if beme_df is None else beme_df
+        crsp = self.crsp_source.load_and_clean() if crsp_df is None else crsp_df
+
+        if beme is None or crsp is None or beme.empty or crsp.empty:
+            empty = pd.DataFrame(columns=self.PORTFOLIO_COLUMNS_6)
+            empty.index.name = 'Date'
+            return empty
+
+        beme = self._prepare_beme(beme)
+        crsp = self._prepare_crsp(crsp)
+
+        formation_years = sorted(beme['year'].dropna().astype(int).unique())
+        target_years = [year for year in formation_years if 1964 <= year <= 1991]
+        if target_years:
+            formation_years = target_years
+
+        rows = []
+        row_index = []
+        for formation_year in formation_years:
+            snapshot = self._formation_snapshot(beme, formation_year)
+            if snapshot.empty:
+                continue
+
+            size_bp = self.compute_nyse_breakpoints_2x3(snapshot, metric='me')
+            beme_bps = self.compute_nyse_breakpoints_2x3(snapshot, metric='beme')
+            assignments = self.assign_portfolios_2x3(snapshot, size_bp, beme_bps)
+            formation = snapshot.assign(portfolio=assignments, formation_me=snapshot['me'])
+            formation = formation.dropna(subset=['portfolio', 'formation_me'])
+            if formation.empty:
+                continue
+
+            formation = formation[['permno', 'portfolio', 'formation_me']].copy()
+            for month in self._holding_months(formation_year):
+                month_returns = crsp.loc[crsp['_month'] == month, ['permno', 'RET']]
+                merged = formation.merge(month_returns, on='permno', how='left')
+                valid_returns = merged.dropna(subset=['RET']).copy()
+                valid_returns = valid_returns[valid_returns['formation_me'] > 0]
+
+                row = {column: np.nan for column in self.PORTFOLIO_COLUMNS_6}
+                for portfolio, group in valid_returns.groupby('portfolio'):
+                    weights = group['formation_me'].astype(float)
+                    returns = group['RET'].astype(float)
+                    if weights.sum() > 0:
+                        row[portfolio] = float(np.average(returns, weights=weights) * 100.0)
+
+                rows.append(row)
+                row_index.append(month.strftime('%Y-%m'))
+
+        result = pd.DataFrame(rows, index=row_index, columns=self.PORTFOLIO_COLUMNS_6)
+        result.index.name = 'Date'
+        return result
 
     def _prepare_beme(self, beme_df: pd.DataFrame) -> pd.DataFrame:
         """Normalize BE/ME input columns needed for portfolio construction."""
