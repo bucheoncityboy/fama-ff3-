@@ -95,9 +95,22 @@ python -m pytest -q
 
 `Fama-French 1993 재현 및 정리.md`를 기준으로 한 표별 반영 상태는 `TABLE_COVERAGE_AUDIT.md`에 정리되어 있다.
 
+과제 제출용으로는 `appendix_output/` 디렉토리를 사용하면 된다. 이 디렉토리는 **포함 표만 따로 정리한 산출물**이며, 제외 대상으로 표시된 채권 하위표는 분리되어 있다.
+
 - **완전 반영에 가까운 항목**: Table 8a, Table 10 제외, Table 11
 - **부분 반영 항목**: Table 1, Table 2, Table 3, Table 4, Table 5, Table 6, Table 7a, Table 9a, Table 9c
 - **중요 주의사항**: `output/table3_bond.csv`, `output/table1_market.csv`, `output/table5_smbhml.csv`, `output/table4_stock3f.csv`, `output/table5_five_factor.csv`, `output/intercept_analysis.csv`는 연구용 마스터 출력이라 **과제 기준에서 제외한 채권 블록까지 함께 포함**할 수 있다. README 본문에서는 과제 기준상 필요한 주식 측 결과만 요약했다.
+
+대표 제출 파일:
+
+- `appendix_output/table1_panel1_firm_count_market_cap.csv`
+- `appendix_output/table2_panel1_factor_summary.csv`
+- `appendix_output/table6_panel4_r2_se.csv`
+- `appendix_output/table7a_panel6_r2_se.csv`
+- `appendix_output/table8a_panel6_r2_se.csv`
+- `appendix_output/table9a_stock_alphas.csv`
+- `appendix_output/table9c_joint_tests.csv`
+- `appendix_output/table11_ep_dp_long.csv`
 
 ---
 
