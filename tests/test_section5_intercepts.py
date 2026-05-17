@@ -70,8 +70,8 @@ class TestOutputStructure:
         assert os.path.exists(INTERCEPT_CSV)
 
     def test_has_128_rows(self, intercept_df):
-        assert len(intercept_df) == 128, (
-            f"Expected 128 rows (32 portfolios x 4 models), got {len(intercept_df)}"
+        assert len(intercept_df) == 160, (
+            f"Expected 160 rows (32 portfolios x 5 models), got {len(intercept_df)}"
         )
 
     def test_required_columns(self, intercept_df):
@@ -100,6 +100,7 @@ class TestOutputStructure:
             "two_factor_bond",
             "three_factor_stock",
             "five_factor",
+            "two_factor_stock",
         }
         assert set(intercept_df["model"].unique()) == expected_models, (
             f"Expected models {expected_models}, got {set(intercept_df['model'].unique())}"

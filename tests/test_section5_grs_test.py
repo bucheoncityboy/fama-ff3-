@@ -79,6 +79,7 @@ class TestOutputStructure:
             "Bonds_2Factor",
             "Bonds_5Factor",
             "All_5Factor",
+            "All_SMBHML",
         }
         actual_tests = set(grs_df["test_name"].tolist())
         assert expected_tests.issubset(actual_tests), (
@@ -119,6 +120,9 @@ class TestSampleSizes:
         all_test = grs_df[grs_df["test_name"] == "All_5Factor"]
         assert (all_test["N"] == 32).all(), "All portfolios test should have N=32"
 
+        all_smbhml_test = grs_df[grs_df["test_name"] == "All_SMBHML"]
+        assert (all_smbhml_test["N"] == 32).all(), "All_SMBHML test should have N=32"
+
     def test_factor_counts(self, grs_df):
         tests = {
             "Stocks_3Factor": 3,
@@ -126,6 +130,7 @@ class TestSampleSizes:
             "Bonds_2Factor": 2,
             "Bonds_5Factor": 5,
             "All_5Factor": 5,
+            "All_SMBHML": 2,
         }
         for test_name, expected_k in tests.items():
             actual_k = grs_df[grs_df["test_name"] == test_name]["K"].iloc[0]
