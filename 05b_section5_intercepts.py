@@ -66,6 +66,7 @@ MODEL_SPECS = [
     (["TERM", "DEF"], "two_factor_bond"),
     (["Mkt-RF", "SMB", "HML"], "three_factor_stock"),
     (["Mkt-RF", "SMB", "HML", "TERM", "DEF"], "five_factor"),
+    (["SMB", "HML"], "two_factor_stock"),
 ]
 
 

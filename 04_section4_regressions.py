@@ -290,6 +290,20 @@ def main() -> None:
     )
 
     # -------------------------------------------------------------------
+    # Table 5: SMB and HML factors alone (FF1993 Table 5)
+    # -------------------------------------------------------------------
+    print("\n" + "=" * 70)
+    print("Table 5: SMB and HML Factors Alone (FF1993 Table 5)")
+    print("=" * 70)
+    t5 = run_specification(
+        combined_df,
+        factors_df,
+        ["SMB", "HML"],
+        "table5_smbhml.csv",
+        "Table 5: SMB and HML Factors Alone",
+    )
+
+    # -------------------------------------------------------------------
     # Paper pattern verification
     # -------------------------------------------------------------------
     print("\n" + "=" * 70)
@@ -307,6 +321,16 @@ def main() -> None:
     stock_t4 = t4[t4["type"] == "stock"]["r_squared"]
     print(f"Table 4 stock R2: min={stock_t4.min():.4f}, max={stock_t4.max():.4f}, mean={stock_t4.mean():.4f}")
     print(f"Table 4 vs Table 1 stock avg R2 improvement: +{stock_t4.mean() - stock_t1.mean():.4f}")
+
+    stock_t5 = t5[t5["type"] == "stock"]["r_squared"]
+    print(f"Table 5 stock R2: min={stock_t5.min():.4f}, max={stock_t5.max():.4f}, mean={stock_t5.mean():.4f}")
+    print(f"Table 5 vs Table 1 stock avg R2 improvement: +{stock_t5.mean() - stock_t1.mean():.4f}")
+    print(f"Table 5 vs Table 4 stock avg R2 improvement: +{stock_t5.mean() - stock_t4.mean():.4f}")
+
+    smb_sig = (t5["t_SMB"].abs() > 2.0).sum()
+    hml_sig = (t5["t_HML"].abs() > 2.0).sum()
+    print(f"Table 5 SMB |t|>2.0: {smb_sig}/{len(t5)} portfolios")
+    print(f"Table 5 HML |t|>2.0: {hml_sig}/{len(t5)} portfolios")
 
     print("=" * 70)
     print("\nDone!")

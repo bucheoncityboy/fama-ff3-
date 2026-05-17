@@ -344,6 +344,11 @@ def main() -> None:
         all_returns, factors_df, ["Mkt-RF", "SMB", "HML", "TERM", "DEF"], "All_5Factor"
     ))
 
+    # 6. All portfolios with 2-factor SMB+HML model
+    results.append(compute_grs_test(
+        all_returns, factors_df, ["SMB", "HML"], "All_SMBHML"
+    ))
+
     # Print results
     print_grs_results(results)
 
