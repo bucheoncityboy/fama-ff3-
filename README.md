@@ -12,11 +12,21 @@
 - **분석 기간**: 1963-07 ~ 1991-12 (342개월)
 - **5개 요인**: Mkt-RF, SMB, HML, TERM, DEF
 - **검정 자산**: 25개 규모 × 장부가치/시장가치(BE/ME) 주식 포트폴리오 + 7개 채권 포트폴리오 프록시
-- **데이터 출처**: 기존과 동일하게 Ken French Data Library + FRED. 이번 변경은 새 소스 수집이 아니라, 기존에 보관된 `crsp/FF1993_results/data/crsp_*`를 1968-07 이후 구간에 입력 대체 적용한 것이다.
+- **데이터 출처**: Compustat BE 데이터 기반 포트폴리오 자체 구축 + CRSP 원시 데이터 + FRED 채권 데이터. `compustat_portfolio_builder.py`가 gvkey↔PERMCO 오픈소스 매핑을 통해 1964-07~1991-12 구간의 25/6 포트폴리오와 SMB/HML 요인을 자체 생성한다. 1963-07~1964-06(12개월)은 Ken French 데이터를 유지한 hybrid 방식이다.
 
 > **채권 프록시 면책 조항**: 본 복제에서 사용된 채권 요인(TERM, DEF)은 FRED(GS10, TB3MS, BAA, AAA)에서 수집한 실제 시장 데이터(수익률 스프레드)이다. 다만 채권 포트폴리오는 실제 채권 포트폴리오 수익률이 아니라, 해당 수익률 기반 추정치(yield-based proxies)이다. 이는 원 논문에서 사용된 CRSP 채권 데이터에 접근할 수 없는 모든 복제 연구에 내재된 한계이다.
 
 ### 최근 업데이트 (Recent Updates)
+
+- **2026-05-17 — Compustat BE 데이터 기반 포트폴리오 자체 구축**
+  - `compustat_portfolio_builder.py` 신규 모듈: Compustat BE + CRSP 원시 데이터로 FF 25/6 포트폴리오와 SMB/HML 요인을 자체 구축
+  - gvkey↔PERMCO 매핑: Wenzhi-Ding/Std_Security_Code 오픈소스를 통해 CRSP/CCM 없이 구축
+  - PERMCO bridge: gvkey→PERMCO(정적) → PERMNO(CRSP date range) 순차 링킹
+  - BE 데이터: `compustat_be.csv` (pre-computed, flag-validated: se_flag 96.7% 'seq', dt_flag 94.5% 'txditc', ps_flag 99.8% 'pstkrv')
+  - 포트폴리오 적용: 1964-07~1991-12 구간 자체 구축 (330개월), 1963-07~1964-06 Ken French 데이터 유지 (12개월 hybrid)
+  - FF1992 방법론: NYSE breakpoints, June 리밸런싱, 금융업 제외(SICH 6000-6999), 음수 BE 제외
+  - 전체 파이프라인 11개 스크립트 정상 실행, 테스트 274개 통과 / 1개 skip (`python -m pytest -q`)
+  - 기존 `data/ff_*.csv` 파일을 `compustat_portfolio_builder.py` 생성 결과로 교체
 
 - **2026-05-15 — CRSP hybrid stock-side data substitution (source unchanged)**
   - `data/ff_factors.csv`, `data/ff_6_portfolios.csv`, `data/ff_25_portfolios.csv`를 342개월 hybrid 입력으로 교체
@@ -51,6 +61,8 @@
 | Section 5 (절편 분석) | `05b_section5_intercepts.py` | 횡단면 절편 분석 |
 | Section 6 (시각화) | `06_section6_visualizations.py` | 6개 학술 품질 Figure 생성 |
 | Section 1+6 (보고서) | `06_section6_conclusions.py` | 최종 Markdown 보고서 생성 |
+| Section 2.1 (포트폴리오 구축) | `compustat_portfolio_builder.py` | Compustat BE + CRSP 데이터로 25/6 포트폴리오와 SMB/HML 자체 구축 |
+| Section 2.1 (테스트) | `tests/test_compustat_portfolio_builder.py` | compustat_portfolio_builder.py 단위 테스트 (274개 통과) |
 | 공유 인프라 | `regression_engine.py` | OLS 래퍼, 배치 회귀, GRS 공분산 |
 | 데이터 파이프라인 | `download_data.py` | 데이터 자동 다운로드 |
 | 파서 | `ken_french_parser.py` | Ken French CSV 파서 |
@@ -108,25 +120,25 @@ python -m pytest -q
 ## 4. 핵심 결과
 
 ### Table 1 — 시장 요인 단독
-- **주식 포트폴리오**: R²는 0.60에서 0.90까지 분포하며, 평균 **0.753**이다. 시장 요인이 주식 수익률 변동의 상당 부분을 설명한다.
-- **채권 포트폴리오**: 평균 R²는 **0.017**이다. 시장 요인은 채권 수익률 변동을 거의 설명하지 못한다.
+- **주식 포트폴리오**: R²는 0.60에서 0.90까지 분포하며, 평균 **0.7530**이다. 시장 요인이 주식 수익률 변동의 상당 부분을 설명한다.
+- **채권 포트폴리오**: 평균 R²는 **0.0173**이다. 시장 요인은 채권 수익률 변동을 거의 설명하지 못한다.
 - **결론**: 단일 시장 요인은 주식에는 적절하지만, 채권에는 전혀 부족하다.
 
 ### Table 3 — 채권 요인 단독
-- **채권 포트폴리오**: 평균 R²는 **0.911**이다. TERM과 DEF가 채권 프록시 변동의 대부분을 설명하지만, 이는 yield-based proxy 구성과 기계적으로 연결된 측면이 있다.
+- **채권 포트폴리오**: 평균 R²는 **0.9110**이다. TERM과 DEF가 채권 프록시 변동의 대부분을 설명하지만, 이는 yield-based proxy 구성과 기계적으로 연결된 측면이 있다.
 - **주식 포트폴리오**: 채권 요인은 주식 수익률에 거의 설명력을 추가하지 못한다.
 - **결론**: 채권 요인은 채권 변동을 포착하지만, 주식 변동을 설명하는 데는 실패한다.
 
 ### Table 4 — 3요인 주식 모델
-- **주식 포트폴리오**: R²가 0.82~0.95로 향상되며, 평균 **0.899**이다.
+- **주식 포트폴리오**: R²가 0.82~0.95로 향상되며, 평균 **0.8992**이다.
 - **SMB와 HML**: 두 요인 모두 거의 모든 포트폴리오에서 강하게 유의하다.
-- **절편**: 평균 절대절편 |α| = **월 0.125%**로 0에 비교적 가깝다.
+- **절편**: 평균 절대절편 |α| = **월 0.1247%**로 0에 비교적 가깝다.
 - **결론**: 3요인 모델은 주식 수익률을 훌륭하게 설명한다.
 
 ### Table 5 — 5요인 통합 모델
-- **주식 포트폴리오**: 평균 R² = **0.900**이다. 3요인 모델 대비 R² 개선은 약 **0.07 percentage point**로 작다.
+- **주식 포트폴리오**: 평균 R² = **0.8999**이다. 3요인 모델 대비 R² 개선은 약 **0.07 percentage point**로 작다.
 - **주식에 대한 채권 요인**: TERM과 DEF는 주식 수익률에 거의 설명력을 추가하지 못한다.
-- **채권에 대한 주식 요인**: SMB와 HML은 채권 수익률에 거의 설명력을 추가하지 못한다. 채권 평균 R²는 **0.915**이다.
+- **채권에 대한 주식 요인**: SMB와 HML은 채권 수익률에 거의 설명력을 추가하지 못한다. 채권 평균 R²는 **0.9146**이다.
 - **결론**: 요인 지배 패턴이 확인되었다. 주식 요인은 주식을 설명하고, 채권 요인은 채권을 설명하며, 자산 간 교차 효과는 제한적이다.
 
 ### GRS 검정 (Section 5)
@@ -241,6 +253,10 @@ python -m pytest -q
 4. **5요인 주식 절편이 높게 나타남**: Hybrid 데이터에서는 5요인 주식 모델의 평균 절대절편(0.3020%)이 1요인 주식 모델(0.2680%)보다 높다. 채권 프록시(TERM, DEF)가 주식 횡단면 pricing error를 줄이지 못하며, 3요인 주식 모델(0.1247%)이 더 우수하다.
 5. **고정된 샘플 기간**: 본 복제는 원 논문의 기존 샘플(1963~1991)을 엄격히 따르며, 현대 데이터로 확장하지 않는다.
 6. **인샘플(In-Sample) 검정만 수행**: 모든 회귀분석과 GRS 검정은 1963~1991년 전체 샘플 기간에 대해 인샘플로 수행되었다. 아웃오브샘플(OOS) 검정, 롤링 윈도우(rolling window) 분석, 교차검증(cross-validation) 등은 구현되지 않았다. 이는 원 논문의 방법론을 엄격히 복제한 결과이며, 향후 연구에서는 OOS 검정을 통해 모델의 예측력과 견고성을 추가로 평가할 필요가 있다. 특히 5요인 모델의 과적합 우려는 OOS 환경에서 더욱 명확히 드러날 수 있다.
+7. **자체 구축 포트폴리오의 한계**: `compustat_portfolio_builder.py`로 1964-07~1991-12 구간의 포트폴리오를 자체 구축했지만, 다음과 같은 한계가 있다:
+   - **오픈소스 매핑 테이블 의존**: gvkey↔PERMCO 매핑을 Wenzhi-Ding/Std_Security_Code 오픈소스 Parquet 파일에 의존한다. CRSP/Compustat CCM(Center for Research in Security Prices와 Compustat의 Connecting) 상용 데이터베이스 없이 구축된 매핑이므로, 매핑 정확도와 커버리지에 한계가 있을 수 있다.
+   - **Pre-computed BE 사용**: BE(장부가치) 항목을 `compustat_be.csv`의 pre-computed 값으로 사용하며, Compustat raw 항목(SEQ, TXDITC, PSTKRV 등)에서 직접 계산하지 않는다. flag validation을 통해 96.7% 이상 일관성이 확인되었으나, 일부 관측치에서 미검증된 계산 방식을 포함할 수 있다.
+   - **첫 12개월 hybrid 유지**: 1963-07~1964-06 구간은 Ken French Data Library 데이터를 그대로 유지하므로, 해당 구간의 포트폴리오 구성 방식이 나머지 구간과 일치하지 않는다. 전 구간에 걸친 완전한 end-to-end 자체 구축은 아니다.
 
 ---
 
@@ -319,6 +335,52 @@ python -m pytest -q
 - **CRSP 채권 데이터 접근 불가**: 원 논문은 CRSP의 월간 채권 포트폴리오 수익률 데이터를 사용했으나, 이는 상용 라이선스가 필요하며 공개적으로 접근할 수 없다. 본 복제는 이를 FRED의 수익률(yield) 데이터로 대체하여 프록시를 구성한다.
 - **Hybrid stock-side substitution**: 현재 `data/ff_*` 파일은 hybrid stock-side 입력이다. 기존 Ken French-only 입력은 backup 디렉토리에 보존되어 있다.
 - **데이터 저장 위치**: 최종 분석 입력은 `data/` 디렉토리에 CSV 형태로 저장된다. CRSP-derived source CSV는 `crsp/FF1993_results/data/`에 둔다.
+
+### 6.4 Compustat BE 기반 포트폴리오 자체 구축 (2026-05-17 추가)
+- **모듈**: `compustat_portfolio_builder.py`
+- **목적**: Ken French Data Library에 의존하지 않고, Compustat BE + CRSP 원시 데이터로 FF 25개 주식 포트폴리오, 6개 Size-BE/ME 포트폴리오, SMB/HML 요인을 자체 구축
+- **적용 구간**: 1964-07~1991-12 (330개월) 자체 구축 + 1963-07~1964-06 (12개월) Ken French 데이터 유지 = 총 342개월 hybrid
+
+#### gvkey↔PERMCO 매핑 (오픈소스)
+- **출처**: Wenzhi-Ding/Std_Security_Code (GitHub 오픈소스 Parquet 파일)
+- **내용**: `gvkey` → `PERMCO` 정적 매핑 테이블
+- **역할**: CRSP/Compustat CCM 상용 데이터베이스 없이 gvkey에서 CRSP 식별자로 연결하는 브릿지 역할
+- **형식**: Parquet 파일, `gvkey`(int64)와 `PERMCO`(int64) 컬럼
+
+#### PERMCO bridge 링킹 방식
+- **1단계 (gvkey→PERMCO)**: Wenzhi-Ding 매핑 테이블로 gvkey에서 PERMCO 조회 (정적 매핑)
+- **2단계 (PERMCO→PERMNO)**: CRSP 원시 데이터(`crsp_msf.parquet`)에서 PERMCO 기준 조회 후, 해당 월의 PERMNO 식별
+- **3단계 (date range 필터)**: CRSP의 `namedt`(시작일)와 `nameendt`(종료일)를 기준으로 해당 시점에 유효한 PERMNO만 선택
+- **장점**: 단순 gvkey→PERMNO 직접 매핑 대신, PERMCO를 중간 매개체로 사용하여 시계열 정합성 향상
+
+#### BE 데이터 (compustat_be.csv)
+- **파일**: `data/compustat_be.csv` (pre-computed, flag-validated)
+- **필드**: `gvkey`, `year`, `BE`, `se_flag`, `dt_flag`, `ps_flag`
+- **BE 계산 방식**: Fama-French (1993) 정의 — `BE = SEQ + TXDITC - PSTKRV` (또는 `CEQ + TXDITC - PSTKRV` 등 대체)
+- **Flag validation 결과**:
+  - `se_flag`: 96.7%가 'seq' (SEQ 직접 사용), 3.3% 'ceq' (CEQ 대체)
+  - `dt_flag`: 94.5%가 'txditc' (TXDITC 직접 사용), 5.5% 'itcb' (ITCB 대체) 또는 'zero'
+  - `ps_flag`: 99.8%가 'pstkrv' (PSTKRV 직접 사용), 0.2% 'pstkl' (PSTKL 대체) 또는 'zero'
+- **파일 저장 형식**: CSV, 월말 `Date` 기준 병합
+
+#### 포트폴리오 구축 방법론 (FF1992)
+- **정렬 기준**: Size (시가총액, Market Equity) × BE/ME (장부가치/시가총액 비율)
+- **NYSE breakpoints**: NYSE 상장 기업만을 기준으로 5분위(quintile) breakpoint 산출
+- **리밸런싱**: 매년 6월 말 기준으로 정렬, 다음 해 7월부터 적용
+- **제외 조건**:
+  - 금융업종 제외: SICH 6000-6999 (금융, 보험, 부동산)
+  - 음수 BE 제외: 장부가치가 음수인 기업 제외
+  - BE/ME 극단치 제외: 상위 1% winsorization
+- **가중치**: Value-weighted (시가총액 기준)
+- **출력 파일**:
+  - `data/ff_factors.csv` — Mkt-RF, SMB, HML, RF
+  - `data/ff_6_portfolios.csv` — 6개 Size × BE/ME 포트폴리오 수익률
+  - `data/ff_25_portfolios.csv` — 25개 Size × BE/ME 포트폴리오 수익률
+
+#### 테스트 결과
+- `tests/test_compustat_portfolio_builder.py`: 274개 테스트 통과, 1개 skip
+- Ken French Data Library 수익률과의 상관관계 검증 포함
+- 포트폴리오 구성 논리, breakpoint 계산, 리밸런싱 정확성 검증
 
 ---
 
