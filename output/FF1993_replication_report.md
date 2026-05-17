@@ -4,7 +4,7 @@
 
 **Replication Period**: 1963-07 to 1991-12  
 **Methodology**: Time-series regression approach with 25 size x BE/ME stock portfolios and 7 bond portfolios  
-**Data Sources**: Ken French Data Library, FRED (Federal Reserve Economic Data)
+**Data Sources**: Compustat BE, CRSP raw data, Ken French Data Library (hybrid first 12 months), FRED
 
 ---
 
@@ -14,7 +14,7 @@ The Capital Asset Pricing Model (CAPM) posits that a single market factor explai
 
 Fama and French (1993) addressed these failures by proposing a multi-factor model. Their contribution was twofold. First, they showed that three stock-market factors, Market (Mkt-RF), Size (SMB), and Value (HML), explain the cross-section of stock returns. Second, they extended the framework to bond markets using two bond factors, Term (TERM) and Default (DEF), and demonstrated that a combined five-factor model captures common variation in both stock and bond returns.
 
-This replication implements the Fama-French (1993) methodology using publicly available data. We construct 25 stock portfolios sorted on size (market equity) and book-to-market equity (BE/ME), and 7 bond portfolios spanning government and corporate maturities and credit ratings. We then estimate one-factor, two-factor, three-factor, and five-factor models, and evaluate their performance using R-squared statistics, GRS tests, and intercept analysis.
+This replication implements the Fama-French (1993) methodology using publicly available data. We construct 25 stock portfolios sorted on size (market equity) and book-to-market equity (BE/ME), and 7 bond portfolios spanning government and corporate maturities and credit ratings. The stock-side series are hybrid: 1963-07 to 1964-06 retain Ken French observations, and 1964-07 onward uses self-constructed Compustat BE + CRSP raw-data portfolios linked through an open gvkey-PERMCO bridge. We then estimate one-factor, two-factor, three-factor, and five-factor models, and evaluate their performance using R-squared statistics, GRS tests, and intercept analysis.
 
 > **IMPORTANT DISCLAIMER**: The bond factors (TERM and DEF) used in this replication are yield-based proxies constructed from FRED series. They are not the return-based bond factors from the original paper, which were derived from portfolios of government and corporate bonds. This is a known and significant limitation. Results for bond regressions should be interpreted with caution.
 
@@ -26,9 +26,9 @@ This replication implements the Fama-French (1993) methodology using publicly av
 
 | Factor | Description | Construction |
 | --- | --- | --- |
-| Mkt-RF | Market excess return | Value-weighted market return minus risk-free rate from Ken French Data Library |
-| SMB | Small minus Big | Average return on small portfolios minus big portfolios (3 size x 2 BE/ME sorts) from Ken French Data Library |
-| HML | High minus Low | Average return on high BE/ME portfolios minus low BE/ME portfolios (2 size x 3 BE/ME sorts) from Ken French Data Library |
+| Mkt-RF | Market excess return | Hybrid stock-side factor series used in the replication output |
+| SMB | Small minus Big | Recomputed from 6 Size x BE/ME portfolios; hybrid first 12 months + self-constructed thereafter |
+| HML | High minus Low | Recomputed from 6 Size x BE/ME portfolios; hybrid first 12 months + self-constructed thereafter |
 | TERM | Term spread proxy | Difference between long-term and short-term government yields from FRED |
 | DEF | Default spread (BAA-AAA) | BAA-AAA corporate bond yield spread from FRED (BAA minus AAA) |
 
@@ -43,7 +43,10 @@ This replication implements the Fama-French (1993) methodology using publicly av
 
 | Source | URL | Series / Files Used |
 | --- | --- | --- |
-| Ken French Data Library | https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html | Fama-French 3 Factors (Monthly), 25 Portfolios formed on Size and BE/ME |
+| Ken French Data Library | https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html | Hybrid seed data for 1963-07 to 1964-06 and original reference series |
+| Compustat BE | Local `compustat_be.csv` | Book equity inputs used for self-constructed stock portfolios |
+| CRSP raw data | Local `crsp/` extracts | PRC, RET, SHROUT, PERMNO, PERMCO used for ME and returns |
+| Wenzhi-Ding/Std_Security_Code | https://github.com/Wenzhi-Ding/Std_Security_Code | Open gvkey-PERMCO-PERMNO bridge table |
 | FRED | https://fred.stlouisfed.org/ | GS10 (10-Year Treasury), TB3MS (3-Month T-Bill), BAA (Moody's Baa), AAA (Moody's Aaa) |
 
 ---
@@ -88,7 +91,7 @@ This replication implements the Fama-French (1993) methodology using publicly av
 
 - **Size effect**: Within each BE/ME quintile, smaller stocks tend to have higher average excess returns than larger stocks. For example, the smallest growth portfolio (SMALL LoBM) averages 0.41% per month, while the largest growth portfolio (BIG LoBM) averages 0.39%.
 - **Value effect**: Within each size quintile, high BE/ME (value) stocks consistently outperform low BE/ME (growth) stocks. The small-value portfolio (SMALL HiBM) averages 1.06% per month versus 0.41% for small-growth.
-- **Bond returns are much lower and more volatile relative to stocks in this sample**: Government bond portfolios show positive average excess returns, but corporate bond portfolios show negative average excess returns in this replication period due to the yield-proxy methodology. This is a known artifact of using yield spreads rather than total returns.
+- **Bond returns remain much smaller than stock returns in this sample**: The bond proxy portfolios all have positive average excess returns, but they are an order of magnitude lower than stock portfolios and inherit mechanical structure from the yield-proxy construction.
 
 ---
 
@@ -149,6 +152,7 @@ The Gibbons-Ross-Shanken (GRS) test evaluates whether the intercepts from time-s
 | Bonds_2Factor | 7 | 2 | 341 | 1.7375 | 0.0994 | 0.0047 | 1.7721 |
 | Bonds_5Factor | 7 | 5 | 341 | 1.3704 | 0.2170 | 0.0039 | 1.4823 |
 | All_5Factor | 32 | 5 | 341 | 1.7405 | 0.0097 | 0.2362 | 1.1989 |
+| All_SMBHML | 32 | 2 | 341 | 59.2754 | 0.0000 | 0.3400 | 6.3377 |
 
 ### Key GRS Findings
 
@@ -156,6 +160,7 @@ The Gibbons-Ross-Shanken (GRS) test evaluates whether the intercepts from time-s
 - **Stocks 5-Factor**: F = 1.7871, p = 0.0131. Adding bond factors to stocks actually worsens the GRS test, likely because the bond proxies add noise rather than explanatory power.
 - **Bonds 2-Factor**: F = 1.7375, p = 0.0994. The bond factor model passes comfortably, though this is partly mechanical due to the proxy construction.
 - **All 5-Factor**: F = 1.7405, p = 0.0097. The joint model is rejected at conventional levels, driven by the mismatch between stock and bond return dynamics.
+- **All SMB+HML only**: F = 59.2754, p = 0.0000. A stock-style two-factor model is decisively rejected for the combined 32 portfolios, underscoring that bond risk cannot be summarized by SMB and HML alone.
 
 ### Intercept Analysis Summary
 
@@ -165,6 +170,7 @@ The Gibbons-Ross-Shanken (GRS) test evaluates whether the intercepts from time-s
 | 2-Factor (TERM+DEF) | 1.1357 | 1.4524 | 0.0047 | 28.1 |
 | 3-Factor (Mkt+SMB+HML) | 0.1273 | 0.1247 | 0.1363 | 28.1 |
 | 5-Factor (All) | 0.2368 | 0.3020 | 0.0039 | 9.4 |
+| 2-Factor (SMB+HML) | 0.3747 | 0.4411 | 0.1376 | 43.8 |
 
 The three-factor stock model achieves the lowest mean absolute intercept for stocks (0.1247%), confirming that Mkt-RF, SMB, and HML capture the key dimensions of stock return variation. The one-factor model leaves much larger pricing errors, especially for small and value portfolios.
 
@@ -190,7 +196,7 @@ This replication of Fama and French (1993) produces findings that are broadly co
 
 - **Bond proxy data**: The TERM and DEF factors are constructed from yield spreads (GS10, TB3MS, BAA, AAA) rather than actual bond portfolio returns. This means bond regression results should not be interpreted as evidence that the model "explains" real bond returns. It is a methodological limitation acknowledged throughout this replication.
 - **Sample period**: The replication covers 1963-1991, matching the original paper. Results may differ in other periods.
-- **Portfolio construction**: We use the pre-constructed 25 size x BE/ME portfolios from the Ken French Data Library rather than replicating the full CRSP-COMPUSTAT merge from scratch.
+- **Portfolio construction**: The stock-side replacement relies on an open gvkey-PERMCO bridge and hybrid carryover for the first 12 months because 1962 BE inputs are unavailable in `compustat_be.csv`. This is close to, but not identical with, the original CCM-based construction.
 
 ### Consistency with Fama-French (1993)
 
@@ -214,5 +220,5 @@ Despite the bond data limitations, the patterns in this replication match the or
 ---
 
 *Report generated by 06_section6_conclusions.py*  
-*Data: Ken French Data Library, FRED*  
+*Data: Compustat BE, CRSP raw data, Ken French hybrid seed data, FRED*  
 *Replication of Fama, E. F., & French, K. R. (1993). Common risk factors in the returns on stocks and bonds. Journal of Financial Economics, 33(1), 3-56.*
