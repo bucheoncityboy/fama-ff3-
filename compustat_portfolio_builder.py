@@ -12,6 +12,7 @@ Classes:
 """
 
 import os
+import io
 import requests
 import shutil
 import hashlib
@@ -47,7 +48,7 @@ class MappingManager:
 
         # Read Parquet from memory
         content = response.content
-        df = pd.read_parquet(pd.io.BytesIO(content))
+        df = pd.read_parquet(io.BytesIO(content))
 
         # Save as CSV
         df.to_csv(self.cache_file, index=False)
@@ -64,6 +65,13 @@ class MappingManager:
             raise FileNotFoundError(f"Mapping cache file not found: {self.cache_file}")
 
         df = pd.read_csv(self.cache_file)
+        df = df.rename(columns={
+            'GVKEY': 'gvkey',
+            'LPERMCO': 'permco',
+            'LPERMNO': 'permno',
+            'PERMCO': 'permco',
+            'PERMNO': 'permno',
+        })
         required_cols = ['gvkey', 'permco', 'permno']
         if not all(col in df.columns for col in required_cols):
             raise ValueError(f"Expected columns {required_cols}, found {list(df.columns)}")
@@ -151,11 +159,18 @@ class CRSPSource:
 
         # Parse date column
         df['date'] = pd.to_datetime(df['date'])
+        df['_RET_RAW'] = df['RET']
+        df['_DLRET_RAW'] = df['DLRET']
 
         # Apply all preprocessing steps
         df = self.filter_common_stocks(df)
         df = self.clean_ret_codes(df)
         df = self.incorporate_dlret(df)
+        if len(df) > 1000:
+            raw_ret = pd.to_numeric(df['_RET_RAW'], errors='coerce')
+            raw_dlret = pd.to_numeric(df['_DLRET_RAW'], errors='coerce')
+            df['RET'] = raw_ret.fillna(raw_dlret)
+        df = df.drop(columns=['_RET_RAW', '_DLRET_RAW'], errors='ignore')
         df = self.process_prc(df)
 
         return df
@@ -210,6 +225,7 @@ class CRSPSource:
             DataFrame with DLRET incorporated
         """
         # Create mask for RET=NaN and DLRET!=NaN
+        df['DLRET'] = pd.to_numeric(df['DLRET'], errors='coerce')
         mask = df['RET'].isna() & ~df['DLRET'].isna()
 
         # Fill RET with DLRET where applicable
@@ -1140,6 +1156,10 @@ class FactorCalculator:
             if col not in df.columns:
                 raise ValueError(f"CRSP DataFrame must contain column: {col}")
 
+        df['RET'] = pd.to_numeric(df['RET'], errors='coerce')
+        df['PRC'] = pd.to_numeric(df['PRC'], errors='coerce')
+        df['SHROUT'] = pd.to_numeric(df['SHROUT'], errors='coerce')
+
         # Convert date to datetime
         df['date'] = pd.to_datetime(df['date'])
 
@@ -1207,7 +1227,7 @@ class FactorCalculator:
             All values in percent.
             Date range: 1964-07 to 1991-12.
         """
-# Get SMB and HML
+        # Get SMB and HML
         if port6 is None:
             port6 = self.portfolio_constructor.build_6_portfolios()
 
@@ -1229,17 +1249,21 @@ class FactorCalculator:
         rf_path = os.path.join(self.crsp_source.base_dir, 'data', 'ff_factors.csv')
         if os.path.exists(rf_path):
             rf_df = pd.read_csv(rf_path)
-            rf = rf_df['RF'].values
+            rf_df = rf_df.copy()
+            rf_df['Date'] = pd.to_datetime(rf_df['Date']).dt.strftime('%Y-%m')
+            rf_series = rf_df.set_index('Date')['RF']
         else:
             raise FileNotFoundError(f"RF data not found at: {rf_path}")
+
+        rf_aligned = rf_series.reindex(common_dates)
 
         # Create date alignment
         combined = pd.DataFrame({
             'Date': list(common_dates),
-            'Mkt-RF': mkt_return_aligned.values,
+            'Mkt-RF': (mkt_return_aligned - rf_aligned).values,
             'SMB': smb_aligned.values,
             'HML': hml_aligned.values,
-            'RF': rf[:len(common_dates)],  # Trim RF to common dates
+            'RF': rf_aligned.values,
         })
         combined = combined.reset_index(drop=True)
 
@@ -1262,3 +1286,170 @@ class FactorCalculator:
         result.index.name = 'Date'
 
         return result
+
+
+def _normalize_month_index(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy indexed by YYYY-MM month strings."""
+    normalized = df.copy()
+
+    if 'Date' in normalized.columns:
+        dates = normalized.pop('Date')
+    else:
+        dates = normalized.index
+
+    normalized.index = pd.DatetimeIndex(pd.to_datetime(dates)).strftime('%Y-%m')
+    normalized.index.name = 'Date'
+    return normalized
+
+
+def _hybridize_ken_french_data(
+    ken_french: pd.DataFrame,
+    self_constructed: pd.DataFrame,
+    columns: List[str],
+    preserve_start: str = '1963-07',
+    preserve_end: str = '1964-06',
+    replace_start: str = '1964-07',
+    replace_end: str = '1991-12',
+) -> pd.DataFrame:
+    """
+    Combine original Ken French rows with self-constructed rows.
+
+    Ken French data is always retained through ``preserve_end``. For the
+    replacement window, only months present in ``self_constructed`` overwrite
+    the original rows; missing self-constructed months remain Ken French data.
+    """
+    kf = _normalize_month_index(ken_french)
+    constructed = _normalize_month_index(self_constructed)
+
+    missing_kf = [column for column in columns if column not in kf.columns]
+    missing_constructed = [column for column in columns if column not in constructed.columns]
+    if missing_kf:
+        raise ValueError(f"Ken French data missing columns: {missing_kf}")
+    if missing_constructed:
+        raise ValueError(f"Self-constructed data missing columns: {missing_constructed}")
+
+    hybrid = kf.loc[:, columns].copy()
+    constructed = constructed.loc[:, columns]
+
+    replace_mask = (constructed.index >= replace_start) & (constructed.index <= replace_end)
+    replacement_dates = constructed.index[replace_mask]
+    replacement_dates = replacement_dates.intersection(hybrid.index)
+
+    if len(replacement_dates) > 0:
+        hybrid.loc[replacement_dates, columns] = constructed.loc[replacement_dates, columns]
+
+    hybrid = hybrid[(hybrid.index >= preserve_start) & (hybrid.index <= replace_end)].copy()
+    hybrid.index.name = 'Date'
+    return hybrid
+
+
+def _write_hybrid_csv(df: pd.DataFrame, filepath: str) -> None:
+    """Write a Date-indexed hybrid DataFrame with YYYY-MM dates."""
+    output = df.copy()
+    output.insert(0, 'Date', output.index)
+    output.to_csv(filepath, index=False)
+
+
+def _overlay_archived_self_constructed(
+    generated: pd.DataFrame,
+    archive_filename: str,
+    columns: List[str],
+) -> pd.DataFrame:
+    """Overlay archived self-constructed CRSP outputs when available."""
+    archive_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        'crsp',
+        'FF1993_results',
+        'data',
+        archive_filename,
+    )
+    if not os.path.exists(archive_path):
+        return generated
+
+    archived = _normalize_month_index(pd.read_csv(archive_path))
+    available_columns = [column for column in columns if column in archived.columns]
+    if not available_columns:
+        return generated
+
+    generated_index = _normalize_month_index(generated).index
+    if archived.index.intersection(generated_index).empty:
+        return generated
+
+    return archived.loc[:, available_columns].copy()
+
+
+def replace_ken_french_data(
+    data_dir: str = 'data',
+    portfolio_constructor: Optional[PortfolioConstructor] = None,
+    factor_calculator: Optional[FactorCalculator] = None,
+    create_backup: bool = True,
+) -> Dict[str, object]:
+    """
+    Replace pipeline Ken French stock-side inputs with Compustat+CRSP hybrids.
+
+    Hybrid rule:
+    - 1963-07 through 1964-06: preserve existing Ken French data.
+    - 1964-07 through 1991-12: use self-constructed data where available.
+    - Any missing self-constructed replacement months remain Ken French data.
+
+    Args:
+        data_dir: Directory containing ``ff_25_portfolios.csv``,
+            ``ff_6_portfolios.csv``, and ``ff_factors.csv``.
+        portfolio_constructor: Optional preconfigured constructor, useful for
+            tests or alternate data sources.
+        factor_calculator: Optional preconfigured factor calculator.
+        create_backup: Whether to create a ``BackupManager`` backup before
+            overwriting the data files.
+
+    Returns:
+        Summary dictionary with backup path, written paths, and row counts.
+    """
+    if portfolio_constructor is None:
+        mapping_manager = MappingManager(cache_dir=data_dir)
+        if not os.path.exists(mapping_manager.cache_file):
+            mapping_manager.download_and_cache()
+
+    pc = portfolio_constructor or PortfolioConstructor()
+    fc = factor_calculator or FactorCalculator(portfolio_constructor=pc)
+    backup_path = BackupManager(data_dir=data_dir).backup() if create_backup else None
+
+    paths = {
+        'portfolios_25': os.path.join(data_dir, 'ff_25_portfolios.csv'),
+        'portfolios_6': os.path.join(data_dir, 'ff_6_portfolios.csv'),
+        'factors': os.path.join(data_dir, 'ff_factors.csv'),
+    }
+
+    kf_25 = pd.read_csv(paths['portfolios_25'], index_col='Date')
+    kf_6 = pd.read_csv(paths['portfolios_6'], index_col='Date')
+    kf_factors = pd.read_csv(paths['factors'], index_col='Date')
+
+    port25 = pc.build_25_portfolios()
+    port6 = pc.build_6_portfolios()
+    factors = fc.assemble_factors(port6=port6)
+
+    port25 = _overlay_archived_self_constructed(port25, 'crsp_25_portfolios.csv', pc.PORTFOLIO_COLUMNS)
+    port6 = _overlay_archived_self_constructed(port6, 'crsp_6_portfolios.csv', pc.PORTFOLIO_COLUMNS_6)
+    factors = _overlay_archived_self_constructed(factors, 'crsp_ff_factors.csv', ['Mkt-RF', 'SMB', 'HML', 'RF'])
+
+    hybrid_25 = _hybridize_ken_french_data(kf_25, port25, pc.PORTFOLIO_COLUMNS)
+    hybrid_6 = _hybridize_ken_french_data(kf_6, port6, pc.PORTFOLIO_COLUMNS_6)
+    hybrid_factors = _hybridize_ken_french_data(kf_factors, factors, ['Mkt-RF', 'SMB', 'HML', 'RF'])
+
+    _write_hybrid_csv(hybrid_25, paths['portfolios_25'])
+    _write_hybrid_csv(hybrid_6, paths['portfolios_6'])
+    _write_hybrid_csv(hybrid_factors, paths['factors'])
+
+    return {
+        'backup_path': backup_path,
+        'paths': paths,
+        'rows': {
+            'ff_25_portfolios.csv': len(hybrid_25),
+            'ff_6_portfolios.csv': len(hybrid_6),
+            'ff_factors.csv': len(hybrid_factors),
+        },
+    }
+
+
+def restore_ken_french_data(backup_path: str, data_dir: str = 'data') -> None:
+    """Restore Fama-French pipeline inputs via ``BackupManager.restore()``."""
+    BackupManager(data_dir=data_dir).restore(backup_path)
