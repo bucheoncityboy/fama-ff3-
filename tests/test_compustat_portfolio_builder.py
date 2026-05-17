@@ -274,6 +274,180 @@ class TestBECalculator:
         assert result['is_financial'].tolist() == [False, True, True, False]
 
 
+class TestLinkingEngine:
+    """Tests for LinkingEngine class."""
+
+    def _write_crsp_file(self, base_dir, rows=None):
+        crsp_dir = base_dir / 'crsp' / 'RET__DLSTCD_1962.01_1991.12'
+        crsp_dir.mkdir(parents=True, exist_ok=True)
+        crsp_file = crsp_dir / 'RET__DLSTCD_1962.01_1991.12.csv'
+
+        columns = ['PERMNO', 'date', 'SHRCD', 'EXCHCD', 'PERMCO', 'DLRET', 'PRC', 'RET', 'SHROUT']
+        pd.DataFrame(rows or [], columns=columns).to_csv(crsp_file, index=False)
+        return crsp_file
+
+    def _write_be_file(self, base_dir):
+        be_file = base_dir / 'compustat_be.csv'
+        pd.DataFrame({
+            'gvkey': [1, 2, 3],
+            'datadate': ['1963-12-31', '1963-12-31', '1963-12-31'],
+            'cal_year': [1963, 1963, 1963],
+            'be': [100.0, 200.0, 300.0],
+            'sich': [2000, 6500, 3500],
+            'se_flag': ['seq', 'seq', 'seq'],
+            'se_source': ['seq', 'seq', 'seq'],
+            'dt_flag': ['txditc', 'txditc', 'zero'],
+            'ps_flag': ['pstkrv', 'pstkrv', 'zero'],
+        }).to_csv(be_file, index=False)
+        return be_file
+
+    def _write_mapping_file(self, base_dir):
+        data_dir = base_dir / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+        mapping_file = data_dir / 'gvkey_permco_permno.csv'
+        pd.DataFrame({
+            'gvkey': [1, 1, 2, 3],
+            'permco': [500, 500, 501, 999],
+            'permno': [10001, 10002, 10003, 19999],
+        }).to_csv(mapping_file, index=False)
+        return mapping_file
+
+    def _write_linking_fixture(self, base_dir):
+        self._write_mapping_file(base_dir)
+        self._write_be_file(base_dir)
+        self._write_crsp_file(base_dir, rows=[
+            [10001, '1964-06-30', 10, 1, 500, np.nan, 10.0, 0.01, 100.0],
+            [10002, '1964-06-30', 11, 2, 500, np.nan, 20.0, 0.02, 50.0],
+            [10003, '1964-05-31', 10, 1, 501, np.nan, 30.0, 0.03, 10.0],
+            [10004, '1964-06-30', 20, 1, 999, np.nan, 40.0, 0.04, 10.0],
+        ])
+
+    def test_init(self, tmp_path):
+        """Test initialization with default and custom dependencies."""
+        self._write_crsp_file(tmp_path)
+
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        assert engine.base_dir == str(tmp_path)
+        assert isinstance(engine.mapping_manager, compustat_portfolio_builder.MappingManager)
+        assert isinstance(engine.crsp_source, compustat_portfolio_builder.CRSPSource)
+        assert isinstance(engine.be_calculator, compustat_portfolio_builder.BECalculator)
+
+        custom_mapping = object()
+        custom_crsp = object()
+        custom_be = object()
+        engine = compustat_portfolio_builder.LinkingEngine(
+            base_dir=str(tmp_path),
+            mapping_manager=custom_mapping,
+            crsp_source=custom_crsp,
+            be_calculator=custom_be,
+        )
+        assert engine.mapping_manager is custom_mapping
+        assert engine.crsp_source is custom_crsp
+        assert engine.be_calculator is custom_be
+
+    def test_build_link_basic(self, tmp_path):
+        """Test build_link returns expected linked rows and columns."""
+        self._write_linking_fixture(tmp_path)
+
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        linked = engine.build_link()
+
+        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial']
+        assert list(linked.columns) == expected_cols
+        assert len(linked) == 2
+        assert set(linked['permno']) == {10001, 10002}
+        assert set(linked['permco']) == {500}
+        assert set(linked['cal_year']) == {1963}
+        assert linked['date'].dt.month.eq(6).all()
+        assert linked.loc[linked['permno'] == 10001, 'me'].iloc[0] == 1000.0
+        assert linked.loc[linked['permno'] == 10002, 'me'].iloc[0] == 1000.0
+
+    def test_build_link_no_mapping(self, tmp_path):
+        """Test build_link handles missing mapping cache gracefully."""
+        self._write_be_file(tmp_path)
+        self._write_crsp_file(tmp_path, rows=[
+            [10001, '1964-06-30', 10, 1, 500, np.nan, 10.0, 0.01, 100.0],
+        ])
+
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        linked = engine.build_link()
+
+        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial']
+        assert list(linked.columns) == expected_cols
+        assert linked.empty
+
+    def test_build_link_coverage(self, tmp_path, capsys):
+        """Test build_link prints coverage statistics."""
+        self._write_linking_fixture(tmp_path)
+
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        linked = engine.build_link()
+        captured = capsys.readouterr()
+
+        assert not linked.empty
+        assert "Total BE gvkeys: 3" in captured.out
+        assert "Gvkeys with CRSP match: 1" in captured.out
+        assert "Coverage: 33.33%" in captured.out
+        assert "Unique PERMNOs linked: 2" in captured.out
+        assert "Sample unmatched gvkeys:" in captured.out
+
+    def test_build_link_partial_mapping_still_links_mapped_rows(self, tmp_path):
+        """Test unmapped BE gvkeys do not break valid PERMCO matches via float upcasting."""
+        data_dir = tmp_path / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({
+            'gvkey': [1],
+            'permco': [500],
+            'permno': [10001],
+        }).to_csv(data_dir / 'gvkey_permco_permno.csv', index=False)
+
+        self._write_be_file(tmp_path)  # gvkeys 2 and 3 are intentionally unmapped
+        self._write_crsp_file(tmp_path, rows=[
+            [10001, '1964-06-30', 10, 1, 500, np.nan, 10.0, 0.01, 100.0],
+        ])
+
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        linked = engine.build_link()
+
+        assert len(linked) == 1
+        assert linked['gvkey'].iloc[0] == 1
+        assert linked['permco'].iloc[0] == 500
+        assert linked['permno'].iloc[0] == 10001
+
+    def test_build_link_mixed_permco_representations(self, tmp_path):
+        """Test integer-like and float-like PERMCO values normalize to the same key."""
+        data_dir = tmp_path / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({
+            'gvkey': ['001'],
+            'permco': ['500.0'],
+            'permno': [10001],
+        }).to_csv(data_dir / 'gvkey_permco_permno.csv', index=False)
+
+        be_file = tmp_path / 'compustat_be.csv'
+        pd.DataFrame({
+            'gvkey': ['001'],
+            'datadate': ['1963-12-31'],
+            'cal_year': [1963],
+            'be': [100.0],
+            'sich': [2000],
+            'se_flag': ['seq'],
+            'se_source': ['seq'],
+            'dt_flag': ['txditc'],
+            'ps_flag': ['pstkrv'],
+        }).to_csv(be_file, index=False)
+        self._write_crsp_file(tmp_path, rows=[
+            [10001, '1964-06-30', 10, 1, 500, np.nan, 10.0, 0.01, 100.0],
+        ])
+
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        linked = engine.build_link()
+
+        assert len(linked) == 1
+        assert linked['permco'].iloc[0] == 500
+        assert linked['me'].iloc[0] == 1000.0
+
+
 class TestBackupManager:
     """Tests for BackupManager class."""
 

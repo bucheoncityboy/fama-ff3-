@@ -319,6 +319,139 @@ class BECalculator:
         return df
 
 
+class LinkingEngine:
+    """Connects Compustat BE records to CRSP June market data via PERMCO."""
+
+    LINK_COLUMNS = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial']
+
+    def __init__(self, base_dir: str = '.', mapping_manager=None, crsp_source=None, be_calculator=None):
+        """
+        Initialize LinkingEngine.
+
+        Args:
+            base_dir: Base directory containing data/, crsp/, and compustat_be.csv
+            mapping_manager: Optional preconfigured MappingManager instance
+            crsp_source: Optional preconfigured CRSPSource instance
+            be_calculator: Optional preconfigured BECalculator instance
+        """
+        self.base_dir = base_dir
+        self.mapping_manager = mapping_manager or MappingManager(cache_dir=os.path.join(base_dir, 'data'))
+        self.crsp_source = crsp_source or CRSPSource(base_dir=base_dir)
+        self.be_calculator = be_calculator or BECalculator(be_file=os.path.join(base_dir, 'compustat_be.csv'))
+
+    def _empty_link(self) -> pd.DataFrame:
+        """Return an empty linked DataFrame with the public output schema."""
+        return pd.DataFrame(columns=self.LINK_COLUMNS)
+
+    def _normalize_identifier_key(self, series: pd.Series) -> pd.Series:
+        """Normalize identifier keys across int/float/string CSV representations."""
+        return (
+            series.astype(str)
+            .str.strip()
+            .str.replace(r'\.0$', '', regex=True)
+            .replace({'nan': pd.NA, 'None': pd.NA, '<NA>': pd.NA})
+        )
+
+    def _print_coverage(self, be_df: pd.DataFrame, linked_df: pd.DataFrame) -> None:
+        """Print gvkey and PERMNO coverage diagnostics for the link."""
+        total_gvkeys = be_df['gvkey'].nunique() if 'gvkey' in be_df.columns else 0
+        linked_gvkeys = linked_df['gvkey'].nunique() if 'gvkey' in linked_df.columns else 0
+        coverage = (linked_gvkeys / total_gvkeys * 100) if total_gvkeys else 0.0
+
+        print("\n=== Linking Coverage ===")
+        print(f"Total BE gvkeys: {total_gvkeys}")
+        print(f"Gvkeys with CRSP match: {linked_gvkeys}")
+        print(f"Coverage: {coverage:.2f}%")
+        print(f"Unique PERMNOs linked: {linked_df['permno'].nunique() if 'permno' in linked_df.columns else 0}")
+
+        if 'gvkey' in be_df.columns and 'gvkey' in linked_df.columns:
+            unmatched = pd.Index(be_df['gvkey'].dropna().unique()).difference(
+                pd.Index(linked_df['gvkey'].dropna().unique())
+            )
+            print(f"Sample unmatched gvkeys: {unmatched[:5].tolist()}")
+        else:
+            print("Sample unmatched gvkeys: []")
+
+    def build_link(self) -> pd.DataFrame:
+        """
+        Build gvkey-PERMCO-PERMNO links between Compustat BE and CRSP June market data.
+
+        Returns:
+            DataFrame with columns: gvkey, permno, permco, date, cal_year, be, me, sich, is_financial
+        """
+        try:
+            mapping = self.mapping_manager.load_mapping()
+        except FileNotFoundError as exc:
+            print(f"Mapping unavailable: {exc}")
+            linked = self._empty_link()
+            try:
+                be = self.be_calculator.load_and_process()
+            except FileNotFoundError:
+                be = pd.DataFrame(columns=['gvkey'])
+            self._print_coverage(be, linked)
+            return linked
+
+        crsp = self.crsp_source.load_and_clean()
+        be = self.be_calculator.load_and_process()
+
+        if mapping.empty or crsp.empty or be.empty:
+            linked = self._empty_link()
+            self._print_coverage(be, linked)
+            return linked
+
+        mapping = mapping.copy()
+        crsp = crsp.copy()
+        be = be.copy()
+
+        # Normalize CRSP identifier column names while preserving BE/mapping public names.
+        crsp = crsp.rename(columns={'PERMNO': 'permno', 'PERMCO': 'permco'})
+        crsp['date'] = pd.to_datetime(crsp['date'])
+
+        mapping['_gvkey_key'] = self._normalize_identifier_key(mapping['gvkey'])
+        mapping['_permco_key'] = self._normalize_identifier_key(mapping['permco'])
+        be['_gvkey_key'] = self._normalize_identifier_key(be['gvkey'])
+
+        # Use gvkey only to reach stable firm-level PERMCO. Static mapping PERMNOs are
+        # intentionally not used for the final issue-level link; CRSP June rows provide
+        # the active PERMNO(s) for each PERMCO and date.
+        bridge = mapping[['_gvkey_key', 'permco', '_permco_key']].drop_duplicates()
+        be_mapped = be.merge(bridge, on='_gvkey_key', how='left')
+        be_mapped = be_mapped.dropna(subset=['_permco_key']).copy()
+        be_mapped['cal_year'] = pd.to_numeric(be_mapped['cal_year'], errors='coerce')
+        be_mapped = be_mapped.dropna(subset=['cal_year']).copy()
+
+        june_crsp = crsp[crsp['date'].dt.month == 6].copy()
+        june_crsp['_permco_key'] = self._normalize_identifier_key(june_crsp['permco'])
+        june_crsp['link_year'] = june_crsp['date'].dt.year
+        june_crsp['me'] = june_crsp['PRC'] * june_crsp['SHROUT']
+
+        be_mapped['link_year'] = be_mapped['cal_year'].astype(int) + 1
+
+        merge_cols = ['permno', '_permco_key', 'date', 'link_year', 'me']
+        linked = be_mapped.merge(
+            june_crsp[merge_cols],
+            on=['_permco_key', 'link_year'],
+            how='inner'
+        )
+
+        if linked.empty:
+            linked = self._empty_link()
+            self._print_coverage(be, linked)
+            return linked
+
+        linked['cal_year'] = linked['cal_year'].astype(int)
+        numeric_permco = pd.to_numeric(linked['_permco_key'], errors='coerce')
+        if numeric_permco.notna().all():
+            linked['permco'] = numeric_permco.astype(int)
+        else:
+            linked['permco'] = linked['_permco_key']
+        linked = linked[self.LINK_COLUMNS].copy()
+        linked = linked.sort_values(['gvkey', 'cal_year', 'permco', 'permno', 'date']).reset_index(drop=True)
+
+        self._print_coverage(be, linked)
+        return linked
+
+
 class BackupManager:
     """Manages backups and restoration of Fama-French data files."""
 
