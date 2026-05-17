@@ -14,7 +14,7 @@ import pytest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT_PATH = os.path.join(BASE_DIR, "06_section6_visualizations.py")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+OUTPUT_DIR = os.path.join(BASE_DIR, "appendix_output")
 
 FIGURE_FILES = {
     "fig1": "fig1_average_returns_heatmap.png",

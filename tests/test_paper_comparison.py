@@ -27,14 +27,16 @@ def test_term_mean_reasonable():
 
 def test_stock_3factor_r2_high():
     """Stock 3-factor model should explain >80% of variance on average."""
-    df = pd.read_csv(os.path.join(BASE_DIR, "output", "table4_stock3f.csv"))
-    stock_r2 = df[df["type"] == "stock"]["r_squared"]
-    assert stock_r2.mean() > 0.80
+    df = pd.read_csv(os.path.join(BASE_DIR, "appendix_output", "table6_panel4_r2_se.csv"), index_col=0)
+    r2_values = []
+    for value in df.to_numpy().flatten():
+        r2_values.append(float(str(value).split("/")[0].strip()))
+    assert sum(r2_values) / len(r2_values) > 0.80
 
 
 def test_grs_statistics_valid():
     """GRS test should produce valid statistics (no NaN/inf)."""
-    df = pd.read_csv(os.path.join(BASE_DIR, "output", "grs_test_results.csv"))
+    df = pd.read_csv(os.path.join(BASE_DIR, "appendix_output", "table9c_joint_tests.csv"))
     assert df["F_stat"].notna().all()
-    assert df["p_value"].notna().all()
-    assert (df["p_value"] >= 0).all() and (df["p_value"] <= 1).all()
+    assert df["F_dist_p_value"].notna().all()
+    assert (df["F_dist_p_value"] >= 0).all() and (df["F_dist_p_value"] <= 1).all()

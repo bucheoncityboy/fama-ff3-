@@ -22,7 +22,7 @@ def data_dir(base_dir):
 @pytest.fixture
 def output_dir(base_dir):
     """Output directory path."""
-    return os.path.join(base_dir, 'output')
+    return os.path.join(base_dir, 'appendix_output')
 
 
 @pytest.fixture

@@ -6,7 +6,9 @@ Generate FF(1993) replication report from computed output CSVs.
 import pandas as pd
 from pathlib import Path
 
-OUTPUT_DIR = Path("output")
+import config
+
+OUTPUT_DIR = Path(config.OUTPUT_DIR)
 REPORT_PATH = OUTPUT_DIR / "FF1993_replication_report.md"
 
 

@@ -21,12 +21,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import config
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+OUTPUT_DIR = config.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 FIG_DPI = 150

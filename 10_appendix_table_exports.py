@@ -3,8 +3,7 @@ Build appendix-facing outputs for the assignment guide
 `Fama-French 1993 재현 및 정리.md`.
 
 Goal:
-- keep research/master outputs in `output/`
-- create assignment-facing filtered tables in `appendix_output/`
+- create assignment-facing filtered tables in the project output directory
 - include only the stock-side tables that the guide asks to keep
 - explicitly separate excluded bond-side subtables
 """
@@ -22,7 +21,7 @@ import config
 import regression_engine as re
 
 
-APPENDIX_DIR = Path("appendix_output")
+APPENDIX_DIR = Path(config.OUTPUT_DIR)
 APPENDIX_DIR.mkdir(exist_ok=True)
 
 STOCK_ROWS = ["SMALL", "ME2", "ME3", "ME4", "BIG"]
@@ -341,7 +340,7 @@ This directory contains assignment-facing tables derived from the repository out
 - Table 9b
 - Table 10
 
-The research/master outputs in `output/` remain unchanged and may still contain the full stock+bond panels.
+This directory is the canonical assignment submission output directory.
 """
     (APPENDIX_DIR / "README.md").write_text(text, encoding="utf-8")
 

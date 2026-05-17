@@ -38,7 +38,7 @@ def test_creates_7_portfolio_columns():
         pass  # May fail if data not available
 
     output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'output', 'bond_portfolios_excess.csv')
+                                'appendix_output', 'bond_portfolios_excess.csv')
 
     if not os.path.exists(output_path):
         pytest.fail(f"Output file not found: {output_path}")
@@ -63,7 +63,7 @@ def test_excess_returns_near_zero():
         pass
 
     output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'output', 'bond_portfolios_excess.csv')
+                                'appendix_output', 'bond_portfolios_excess.csv')
 
     if not os.path.exists(output_path):
         pytest.fail(f"Output file not found: {output_path}")
@@ -99,7 +99,7 @@ def test_disclaimer_present():
 
 
 def test_output_file_exists():
-    """Output CSV is saved to output/bond_portfolios_excess.csv."""
+    """Output CSV is saved to appendix_output/bond_portfolios_excess.csv."""
     import importlib.util
     spec = importlib.util.find_spec('02b_section2_bond_portfolios')
     if spec is None:
@@ -113,7 +113,7 @@ def test_output_file_exists():
         pass
 
     output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'output', 'bond_portfolios_excess.csv')
+                                'appendix_output', 'bond_portfolios_excess.csv')
     assert os.path.exists(output_path), f"Expected output file at {output_path}"
 
 
@@ -133,7 +133,7 @@ def test_date_range_matches_config():
         pass
 
     output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'output', 'bond_portfolios_excess.csv')
+                                'appendix_output', 'bond_portfolios_excess.csv')
 
     if not os.path.exists(output_path):
         pytest.fail(f"Output file not found: {output_path}")
@@ -166,7 +166,7 @@ def test_no_nan_in_output():
         pass
 
     output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'output', 'bond_portfolios_excess.csv')
+                                'appendix_output', 'bond_portfolios_excess.csv')
 
     if not os.path.exists(output_path):
         pytest.fail(f"Output file not found: {output_path}")

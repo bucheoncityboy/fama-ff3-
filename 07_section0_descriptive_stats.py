@@ -21,6 +21,8 @@ import sys
 import pandas as pd
 from datetime import datetime
 
+import config
+
 # Import from compustat_portfolio_builder
 from compustat_portfolio_builder import BEMECalculator, PortfolioConstructor
 
@@ -203,10 +205,10 @@ def print_summary_table(df):
 
 def save_output(df, overall_ok):
     """Save output files."""
-    os.makedirs('output', exist_ok=True)
+    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
 
     # Save CSV
-    output_path = 'output/table0_descriptive_stats.csv'
+    output_path = os.path.join(config.OUTPUT_DIR, 'table0_descriptive_stats.csv')
     df.to_csv(output_path, index=False)
     print(f"\nSaved CSV to: {output_path}")
 

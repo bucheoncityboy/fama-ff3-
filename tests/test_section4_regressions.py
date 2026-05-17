@@ -15,9 +15,9 @@ import pytest
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT_PATH = os.path.join(BASE_DIR, "04_section4_regressions.py")
 
-TABLE1_CSV = os.path.join(BASE_DIR, "output", "table1_market.csv")
-TABLE3_CSV = os.path.join(BASE_DIR, "output", "table3_bond.csv")
-TABLE4_CSV = os.path.join(BASE_DIR, "output", "table4_stock3f.csv")
+TABLE1_CSV = os.path.join(BASE_DIR, "appendix_output", "table1_market.csv")
+TABLE3_CSV = os.path.join(BASE_DIR, "appendix_output", "table3_bond.csv")
+TABLE4_CSV = os.path.join(BASE_DIR, "appendix_output", "table4_stock3f.csv")
 
 STOCK_COLS = [
     "SMALL LoBM",

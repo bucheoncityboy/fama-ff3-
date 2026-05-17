@@ -15,7 +15,7 @@ import pytest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT_PATH = os.path.join(BASE_DIR, "05b_section5_intercepts.py")
-INTERCEPT_CSV = os.path.join(BASE_DIR, "output", "intercept_analysis.csv")
+INTERCEPT_CSV = os.path.join(BASE_DIR, "appendix_output", "intercept_analysis.csv")
 
 STOCK_COLS = [
     "SMALL LoBM", "ME1 BM2", "ME1 BM3", "ME1 BM4", "SMALL HiBM",
