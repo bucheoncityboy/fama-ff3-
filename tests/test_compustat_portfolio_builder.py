@@ -8,8 +8,6 @@ import pytest
 import pandas as pd
 import numpy as np
 import tempfile
-import shutil
-import requests
 from pathlib import Path
 
 import compustat_portfolio_builder
@@ -39,7 +37,6 @@ class TestMappingManager:
         manager = compustat_portfolio_builder.MappingManager(cache_dir=str(tmp_path))
 
         # Mock requests.get to avoid actual download
-        original_get = requests.get
         def mock_get(url, stream=False, **kwargs):
             class MockResponse:
                 def raise_for_status(self):
@@ -352,12 +349,13 @@ class TestLinkingEngine:
         engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
         linked = engine.build_link()
 
-        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial']
+        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial', 'EXCHCD']
         assert list(linked.columns) == expected_cols
         assert len(linked) == 2
         assert set(linked['permno']) == {10001, 10002}
         assert set(linked['permco']) == {500}
         assert set(linked['cal_year']) == {1963}
+        assert set(linked['EXCHCD']) == {1, 2}
         assert linked['date'].dt.month.eq(6).all()
         assert linked.loc[linked['permno'] == 10001, 'me'].iloc[0] == 1000.0
         assert linked.loc[linked['permno'] == 10002, 'me'].iloc[0] == 1000.0
@@ -372,7 +370,7 @@ class TestLinkingEngine:
         engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
         linked = engine.build_link()
 
-        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial']
+        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial', 'EXCHCD']
         assert list(linked.columns) == expected_cols
         assert linked.empty
 
@@ -448,6 +446,166 @@ class TestLinkingEngine:
         assert linked['me'].iloc[0] == 1000.0
 
 
+class TestBEMECalculator:
+    """Tests for BEMECalculator class."""
+
+    class DummyEngine:
+        def __init__(self, linked_df=None):
+            self.linked_df = linked_df if linked_df is not None else pd.DataFrame()
+
+        def build_link(self):
+            return self.linked_df
+
+    def _sample_linked_df(self):
+        return pd.DataFrame({
+            'gvkey': [1, 2],
+            'permno': [10001, 10002],
+            'permco': [500, 501],
+            'date': pd.to_datetime(['1964-06-30', '1965-06-30']),
+            'cal_year': [1963, 1964],
+            'be': [100.0, 300.0],
+            'me': [1000.0, 1500.0],
+            'sich': [2000, 3500],
+            'is_financial': [False, False],
+            'EXCHCD': [1, 2],
+        })
+
+    def _write_crsp_file(self, base_dir, rows=None):
+        crsp_dir = base_dir / 'crsp' / 'RET__DLSTCD_1962.01_1991.12'
+        crsp_dir.mkdir(parents=True, exist_ok=True)
+        crsp_file = crsp_dir / 'RET__DLSTCD_1962.01_1991.12.csv'
+        columns = ['PERMNO', 'date', 'SHRCD', 'EXCHCD', 'PERMCO', 'DLRET', 'PRC', 'RET', 'SHROUT']
+        pd.DataFrame(rows or [], columns=columns).to_csv(crsp_file, index=False)
+        return crsp_file
+
+    def _write_mapping_file(self, base_dir):
+        data_dir = base_dir / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({
+            'gvkey': [1, 2],
+            'permco': [500, 501],
+            'permno': [10001, 10002],
+        }).to_csv(data_dir / 'gvkey_permco_permno.csv', index=False)
+
+    def _write_be_file(self, base_dir):
+        pd.DataFrame({
+            'gvkey': [1, 2],
+            'datadate': ['1963-12-31', '1963-12-31'],
+            'cal_year': [1963, 1963],
+            'be': [100.0, 200.0],
+            'sich': [2000, 6500],
+            'se_flag': ['seq', 'seq'],
+            'se_source': ['seq', 'seq'],
+            'dt_flag': ['txditc', 'txditc'],
+            'ps_flag': ['pstkrv', 'pstkrv'],
+        }).to_csv(base_dir / 'compustat_be.csv', index=False)
+
+    def test_init(self, monkeypatch):
+        """Test initialization with default and custom engine."""
+        created_engine = self.DummyEngine()
+        monkeypatch.setattr(compustat_portfolio_builder, 'LinkingEngine', lambda: created_engine)
+
+        calc = compustat_portfolio_builder.BEMECalculator()
+        assert calc.engine is created_engine
+
+        custom_engine = self.DummyEngine()
+        calc = compustat_portfolio_builder.BEMECalculator(engine=custom_engine)
+        assert calc.engine is custom_engine
+
+    def test_compute_all_with_linked_df(self):
+        """Test compute_all computes BE/ME ratios and output columns from synthetic linked data."""
+        linked = self._sample_linked_df()
+        calc = compustat_portfolio_builder.BEMECalculator(engine=self.DummyEngine())
+
+        result = calc.compute_all(linked)
+
+        expected_cols = ['gvkey', 'permno', 'permco', 'date', 'year', 'be', 'me', 'beme', 'sich', 'is_financial', 'exchange']
+        assert list(result.columns) == expected_cols
+        assert len(result) == 2
+        assert result.loc[result['gvkey'] == 1, 'beme'].iloc[0] == pytest.approx(0.1)
+        assert result.loc[result['gvkey'] == 2, 'beme'].iloc[0] == pytest.approx(0.2)
+        assert result.loc[result['gvkey'] == 1, 'year'].iloc[0] == 1964
+        assert set(result['exchange']) == {1, 2}
+
+    def test_filters_negative_be(self):
+        """Test compute_all removes non-positive BE rows."""
+        linked = self._sample_linked_df()
+        linked.loc[0, 'be'] = -10.0
+        calc = compustat_portfolio_builder.BEMECalculator(engine=self.DummyEngine())
+
+        result = calc.compute_all(linked)
+
+        assert len(result) == 1
+        assert result['gvkey'].tolist() == [2]
+        assert (result['be'] > 0).all()
+
+    def test_filters_financial(self):
+        """Test compute_all removes financial firms."""
+        linked = self._sample_linked_df()
+        linked.loc[0, 'is_financial'] = True
+        calc = compustat_portfolio_builder.BEMECalculator(engine=self.DummyEngine())
+
+        result = calc.compute_all(linked)
+
+        assert len(result) == 1
+        assert result['gvkey'].tolist() == [2]
+        assert not result['is_financial'].any()
+
+    def test_filters_zero_me(self):
+        """Test compute_all removes non-positive ME rows and avoids division by zero."""
+        linked = self._sample_linked_df()
+        linked.loc[0, 'me'] = 0.0
+        calc = compustat_portfolio_builder.BEMECalculator(engine=self.DummyEngine())
+
+        result = calc.compute_all(linked)
+
+        assert len(result) == 1
+        assert result['gvkey'].tolist() == [2]
+        assert (result['me'] > 0).all()
+
+    def test_filters_beme_outliers_by_year(self):
+        """Test compute_all trims top and bottom 0.5% BE/ME observations per year."""
+        linked = pd.DataFrame({
+            'gvkey': range(1, 101),
+            'permno': range(10001, 10101),
+            'permco': range(501, 601),
+            'date': pd.to_datetime(['1964-06-30'] * 100),
+            'cal_year': [1963] * 100,
+            'be': [100.0] * 100,
+            'me': [1000.0] * 100,
+            'sich': [2000] * 100,
+            'is_financial': [False] * 100,
+            'EXCHCD': [1] * 100,
+        })
+        linked.loc[0, ['be', 'me']] = [1.0, 1000.0]
+        linked.loc[99, ['be', 'me']] = [1000.0, 1.0]
+        calc = compustat_portfolio_builder.BEMECalculator(engine=self.DummyEngine())
+
+        result = calc.compute_all(linked)
+
+        assert len(result) == 98
+        assert 1 not in set(result['gvkey'])
+        assert 100 not in set(result['gvkey'])
+
+    def test_compute_all_from_engine(self, tmp_path):
+        """Integration test compute_all using a LinkingEngine with synthetic source files."""
+        self._write_mapping_file(tmp_path)
+        self._write_be_file(tmp_path)
+        self._write_crsp_file(tmp_path, rows=[
+            [10001, '1964-06-30', 10, 1, 500, np.nan, 10.0, 0.01, 100.0],
+            [10002, '1964-06-30', 11, 2, 501, np.nan, 20.0, 0.02, 50.0],
+        ])
+        engine = compustat_portfolio_builder.LinkingEngine(base_dir=str(tmp_path))
+        calc = compustat_portfolio_builder.BEMECalculator(engine=engine)
+
+        result = calc.compute_all()
+
+        assert len(result) == 1
+        assert result['gvkey'].iloc[0] == 1
+        assert result['beme'].iloc[0] == pytest.approx(0.1)
+        assert result['exchange'].iloc[0] == 1
+
+
 class TestBackupManager:
     """Tests for BackupManager class."""
 
@@ -505,10 +663,9 @@ class TestBackupManager:
         for filename in ['ff_25_portfolios.csv', 'ff_6_portfolios.csv', 'ff_factors.csv']:
             filepath = tmp_path / 'data' / filename
             filepath.parent.mkdir(parents=True, exist_ok=True)
-            filepath.write_text(f'header\ncol1,col2\n1,2\n')
+            filepath.write_text('header\ncol1,col2\n1,2\n')
 
         # Mock requests.get to avoid actual download
-        original_get = requests.get
         def mock_get(url, stream=False, **kwargs):
             class MockResponse:
                 def raise_for_status(self):
@@ -541,10 +698,9 @@ class TestBackupManager:
         for filename in ['ff_25_portfolios.csv', 'ff_6_portfolios.csv', 'ff_factors.csv']:
             filepath = tmp_path / 'data' / filename
             filepath.parent.mkdir(parents=True, exist_ok=True)
-            filepath.write_text(f'header\ncol1,col2\n1,2\n')
+            filepath.write_text('header\ncol1,col2\n1,2\n')
 
         # Mock requests.get
-        original_get = requests.get
         def mock_get(url, stream=False, **kwargs):
             class MockResponse:
                 def raise_for_status(self):

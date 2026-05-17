@@ -6,6 +6,8 @@ Classes:
 - MappingManager: Downloads and caches gvkey↔PERMCO↔PERMNO mappings
 - CRSPSource: Loads and preprocesses CRSP stock return data
 - BECalculator: Loads and validates Compustat book equity data
+- LinkingEngine: Links Compustat BE records to CRSP June market equity
+- BEMECalculator: Computes filtered annual BE/ME snapshots
 - BackupManager: Creates and restores backups of Fama-French data
 """
 
@@ -322,7 +324,7 @@ class BECalculator:
 class LinkingEngine:
     """Connects Compustat BE records to CRSP June market data via PERMCO."""
 
-    LINK_COLUMNS = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial']
+    LINK_COLUMNS = ['gvkey', 'permno', 'permco', 'date', 'cal_year', 'be', 'me', 'sich', 'is_financial', 'EXCHCD']
 
     def __init__(self, base_dir: str = '.', mapping_manager=None, crsp_source=None, be_calculator=None):
         """
@@ -377,7 +379,7 @@ class LinkingEngine:
         Build gvkey-PERMCO-PERMNO links between Compustat BE and CRSP June market data.
 
         Returns:
-            DataFrame with columns: gvkey, permno, permco, date, cal_year, be, me, sich, is_financial
+            DataFrame with columns: gvkey, permno, permco, date, cal_year, be, me, sich, is_financial, EXCHCD
         """
         try:
             mapping = self.mapping_manager.load_mapping()
@@ -427,7 +429,7 @@ class LinkingEngine:
 
         be_mapped['link_year'] = be_mapped['cal_year'].astype(int) + 1
 
-        merge_cols = ['permno', '_permco_key', 'date', 'link_year', 'me']
+        merge_cols = ['permno', '_permco_key', 'date', 'link_year', 'me', 'EXCHCD']
         linked = be_mapped.merge(
             june_crsp[merge_cols],
             on=['_permco_key', 'link_year'],
@@ -450,6 +452,117 @@ class LinkingEngine:
 
         self._print_coverage(be, linked)
         return linked
+
+
+class BEMECalculator:
+    """Computes FF1992-ready annual BE/ME snapshots from linked Compustat-CRSP data."""
+
+    OUTPUT_COLUMNS = [
+        'gvkey', 'permno', 'permco', 'date', 'year', 'be', 'me', 'beme',
+        'sich', 'is_financial', 'exchange'
+    ]
+
+    def __init__(self, engine=None):
+        """
+        Initialize BEMECalculator.
+
+        Args:
+            engine: Optional preconfigured LinkingEngine instance.
+        """
+        self.engine = engine or LinkingEngine()
+
+    def _empty_result(self) -> pd.DataFrame:
+        """Return an empty BE/ME snapshot with the public output schema."""
+        return pd.DataFrame(columns=self.OUTPUT_COLUMNS)
+
+    def _print_diagnostics(self, before_count: int, removals: Dict[str, int], result: pd.DataFrame) -> None:
+        """Print filter and annual-count diagnostics."""
+        print("\n=== BE/ME Filter Diagnostics ===")
+        print(f"Total rows before filtering: {before_count}")
+        print(f"Rows removed - negative/zero BE: {removals['negative_be']}")
+        print(f"Rows removed - financial firms: {removals['financial']}")
+        print(f"Rows removed - zero/negative ME: {removals['zero_me']}")
+        print(f"Rows removed - BE/ME outliers: {removals['outliers']}")
+        print(f"Total rows after filtering: {len(result)}")
+
+        print("\nPer-year observation counts:")
+        if result.empty:
+            print("No observations after filtering")
+            return
+
+        counts = result.groupby('year').size().sort_index()
+        print(counts.to_string())
+
+        target_years = range(1964, 1992)
+        thin_years = {year: int(counts.get(year, 0)) for year in target_years if counts.get(year, 0) < 500}
+        if thin_years:
+            print(f"Warning: years with fewer than 500 observations: {thin_years}")
+
+    def _trim_beme_outliers(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Trim top and bottom 0.5% BE/ME observations within each year."""
+        if df.empty:
+            return df
+
+        lower = df.groupby('year')['beme'].transform(lambda values: values.quantile(0.005))
+        upper = df.groupby('year')['beme'].transform(lambda values: values.quantile(0.995))
+        keep_mask = df['beme'].between(lower, upper, inclusive='both')
+        return df[keep_mask].copy()
+
+    def compute_all(self, linked_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        """
+        Compute clean annual BE/ME snapshots from linked Compustat-CRSP output.
+
+        Args:
+            linked_df: Optional linked DataFrame. If omitted, uses self.engine.build_link().
+
+        Returns:
+            DataFrame with columns gvkey, permno, permco, date, year, be, me, beme,
+            sich, is_financial, exchange.
+        """
+        linked = self.engine.build_link() if linked_df is None else linked_df
+        if linked is None or linked.empty:
+            result = self._empty_result()
+            self._print_diagnostics(0, {'negative_be': 0, 'financial': 0, 'zero_me': 0, 'outliers': 0}, result)
+            return result
+
+        df = linked.copy()
+        before_count = len(df)
+        removals = {}
+
+        df['date'] = pd.to_datetime(df['date'])
+        df['year'] = df['date'].dt.year
+        df['be'] = pd.to_numeric(df['be'], errors='coerce')
+        df['me'] = pd.to_numeric(df['me'], errors='coerce')
+        df['beme'] = np.where(df['me'] != 0, df['be'] / df['me'], np.nan)
+        df['beme'] = pd.to_numeric(df['beme'], errors='coerce').replace([np.inf, -np.inf], np.nan)
+
+        if 'EXCHCD' in df.columns:
+            df['exchange'] = df['EXCHCD']
+        elif 'exchange' not in df.columns:
+            df['exchange'] = pd.NA
+
+        current = len(df)
+        df = df[df['be'] > 0].copy()
+        removals['negative_be'] = current - len(df)
+
+        current = len(df)
+        if 'is_financial' in df.columns:
+            financial_mask = df['is_financial'].fillna(False).astype(bool)
+            df = df[~financial_mask].copy()
+        removals['financial'] = current - len(df)
+
+        current = len(df)
+        df = df[df['me'] > 0].copy()
+        removals['zero_me'] = current - len(df)
+
+        df = df.dropna(subset=['beme']).copy()
+        current = len(df)
+        df = self._trim_beme_outliers(df)
+        removals['outliers'] = current - len(df)
+
+        result = df[self.OUTPUT_COLUMNS].sort_values(['year', 'gvkey', 'permco', 'permno', 'date']).reset_index(drop=True)
+        self._print_diagnostics(before_count, removals, result)
+        return result
 
 
 class BackupManager:
