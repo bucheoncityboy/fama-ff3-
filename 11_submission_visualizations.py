@@ -63,13 +63,11 @@ def _avg_r2(path: str) -> float:
 
 
 def fig3_model_r2() -> None:
-    labels = ["1-factor", "2-factor\nTERM+DEF", "3-factor", "5-factor", "RMO+4 factors"]
+    labels = ["1-factor", "SMB+HML", "3-factor"]
     values = [
         _avg_r2("table4_panel2_r2_se.csv"),
-        _avg_r2("table3_panel3_r2_se.csv"),
+        _avg_r2("table5_panel3_r2_se.csv"),
         _avg_r2("table6_panel4_r2_se.csv"),
-        _avg_r2("table7a_panel6_r2_se.csv"),
-        _avg_r2("table8a_panel6_r2_se.csv"),
     ]
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.bar(labels, values, color="#4C78A8")
@@ -110,17 +108,17 @@ def fig5_alpha_and_joint_test() -> None:
             values.append(abs(alpha))
         return float(np.mean(values))
 
-    alpha_models = ["(ii)", "(iv)", "(v)"]
+    alpha_models = ["(ii)", "(iii)", "(iv)"]
     alpha_values = [mean_abs_alpha(col) for col in alpha_models]
     f_values = [
         float(joint_df.loc[joint_df["model"] == "(ii)", "F_stat"].iloc[0]),
+        float(joint_df.loc[joint_df["model"] == "(iii)", "F_stat"].iloc[0]),
         float(joint_df.loc[joint_df["model"] == "(iv)", "F_stat"].iloc[0]),
-        float(joint_df.loc[joint_df["model"] == "(v)", "F_stat"].iloc[0]),
     ]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    labels = ["CAPM", "FF3F", "FF5F"]
+    labels = ["CAPM", "SMB+HML", "FF3F"]
     axes[0].bar(labels, alpha_values, color="#4C78A8")
     axes[0].set_title("Figure 5A. Mean absolute alpha by model")
     axes[0].set_ylabel("Mean |alpha|")

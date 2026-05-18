@@ -189,11 +189,6 @@ def build_regression_tables(factors: pd.DataFrame, stock: pd.DataFrame) -> None:
     factor_pct["RMO"] = rmo
 
     specs = {
-        "table3": (["TERM", "DEF"], [
-            ("panel1_m_t_m", lambda r: f"{r['beta_TERM']:.2f} / {r['t_TERM']:.2f}"),
-            ("panel2_d_t_d", lambda r: f"{r['beta_DEF']:.2f} / {r['t_DEF']:.2f}"),
-            ("panel3_r2_se", lambda r: f"{r['r_squared']:.2f} / {r['s_e']:.2f}"),
-        ]),
         "table4": (["Mkt-RF"], [
             ("panel1_b_t_b", lambda r: f"{r['beta_Mkt-RF']:.2f} / {r['t_Mkt-RF']:.2f}"),
             ("panel2_r2_se", lambda r: f"{r['r_squared']:.2f} / {r['s_e']:.2f}"),
@@ -209,22 +204,6 @@ def build_regression_tables(factors: pd.DataFrame, stock: pd.DataFrame) -> None:
             ("panel3_h_t_h", lambda r: f"{r['beta_HML']:.2f} / {r['t_HML']:.2f}"),
             ("panel4_r2_se", lambda r: f"{r['r_squared']:.2f} / {r['s_e']:.2f}"),
         ]),
-        "table7a": (["Mkt-RF", "SMB", "HML", "TERM", "DEF"], [
-            ("panel1_b_t_b", lambda r: f"{r['beta_Mkt-RF']:.2f} / {r['t_Mkt-RF']:.2f}"),
-            ("panel2_s_t_s", lambda r: f"{r['beta_SMB']:.2f} / {r['t_SMB']:.2f}"),
-            ("panel3_h_t_h", lambda r: f"{r['beta_HML']:.2f} / {r['t_HML']:.2f}"),
-            ("panel4_m_t_m", lambda r: f"{r['beta_TERM']:.2f} / {r['t_TERM']:.2f}"),
-            ("panel5_d_t_d", lambda r: f"{r['beta_DEF']:.2f} / {r['t_DEF']:.2f}"),
-            ("panel6_r2_se", lambda r: f"{r['r_squared']:.2f} / {r['s_e']:.2f}"),
-        ]),
-        "table8a": (["RMO", "SMB", "HML", "TERM", "DEF"], [
-            ("panel1_b_t_b", lambda r: f"{r['beta_RMO']:.2f} / {r['t_RMO']:.2f}"),
-            ("panel2_s_t_s", lambda r: f"{r['beta_SMB']:.2f} / {r['t_SMB']:.2f}"),
-            ("panel3_h_t_h", lambda r: f"{r['beta_HML']:.2f} / {r['t_HML']:.2f}"),
-            ("panel4_m_t_m", lambda r: f"{r['beta_TERM']:.2f} / {r['t_TERM']:.2f}"),
-            ("panel5_d_t_d", lambda r: f"{r['beta_DEF']:.2f} / {r['t_DEF']:.2f}"),
-            ("panel6_r2_se", lambda r: f"{r['r_squared']:.2f} / {r['s_e']:.2f}"),
-        ]),
     }
 
     for table_name, (factors_used, panels) in specs.items():
@@ -237,11 +216,9 @@ def build_table9(stock: pd.DataFrame, bond: pd.DataFrame, factors: pd.DataFrame)
     factor_pct = factors.copy()
     factor_pct[["TERM", "DEF"]] = factor_pct[["TERM", "DEF"]] * 100.0
     model_specs = [
-        ("(i)", ["TERM", "DEF"]),
         ("(ii)", ["Mkt-RF"]),
         ("(iii)", ["SMB", "HML"]),
         ("(iv)", ["Mkt-RF", "SMB", "HML"]),
-        ("(v)", ["Mkt-RF", "SMB", "HML", "TERM", "DEF"]),
     ]
 
     rows = []
