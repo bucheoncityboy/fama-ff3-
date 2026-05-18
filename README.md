@@ -1,15 +1,8 @@
-# Fama-French (1993) 과제 제출 패키지
-
-이 저장소는 **Fama & French (1993), _Common Risk Factors in the Returns on Stocks and Bonds_**의 핵심 결과를 과제 제출 형식으로 재현한 패키지다. 저장소는 더 이상 연구용 `output/` 중심 구조가 아니라, **제출용 산출물 `appendix_output/`만 공식 결과 디렉토리**로 사용한다.
-
-핵심 목표는 두 가지였다.
-
-1. 논문과 과제 가이드(`Fama-French 1993 재현 및 정리.md`)가 요구하는 표를 다시 만들기
-2. 각 표가 논문의 어떤 주장과 연결되는지 README에서 직접 설명하기
+# Fama-French (1993)
 
 ---
 
-## 1. 제출 패키지 사용법
+## 1. 사용법
 
 ### 공식 제출 산출물
 
@@ -30,7 +23,7 @@ python -m pytest -q
 
 ---
 
-## 2. 무엇을 어떻게 구현했는가
+## 2. 구현
 
 ### 2.1 주식 포트폴리오 구성
 
@@ -56,17 +49,7 @@ python -m pytest -q
 - `compustat_portfolio_builder.py`가 이 재계산 값을 1964-07부터 French 원본 위에 덮어씌운다
 - 결과적으로 **전 기간(1963-07~1991-12)에 빈 구간 없이 연속적인 factor 시계열**이 확보된다
 
-### 2.2 채권 요인 및 채권 프록시
-
-채권 측은 논문 원자료를 그대로 복원할 수 없어서 FRED 기반 프록시로 구현했다.
-
-- TERM = 장기 국채 수익률 − 단기 무위험 수익률
-- DEF = BAA − AAA 신용스프레드
-- 채권 포트폴리오는 실제 CRSP 채권 수익률이 아니라 yield-based proxy
-
-그래서 채권 관련 결과는 “원 논문과 숫자까지 일치”를 증명하는 용도보다, **채권 요인과 주식 요인의 분리 구조가 나타나는지**를 확인하는 용도로 해석했다.
-
-### 2.3 과제 제출용 표 구성기
+### 2.2 제출용 표 구성
 
 `10_appendix_table_exports.py`가 최종 제출용 표를 정리한다.
 
@@ -77,9 +60,9 @@ python -m pytest -q
 - Table 9a/9c처럼 과제에 맞는 형태로 다시 편집한다 (포함 모형 `(ii)` CAPM, `(iii)` SMB+HML, `(iv)` FF3F만 유지).
 - **Table 9c**: F-분포 p-value와 함께 **residual bootstrap (B=999)** 기반 확률 수준을 추가로 계산한다. Restricted model (H0: alpha=0)의 잔차를 시간 축에서 복원 추출하여 cross-sectional correlation을 보존한 bootstrap p-value를 제공한다.
 
-### 2.4 제출용 시각화
+### 2.3 제출용 시각화
 
-`11_submission_visualizations.py`는 appendix 표에서 바로 읽어 제출용 그림을 만든다.
+`11_submission_visualizations.py`
 
 | 그림 | 내용 | 데이터 출처 |
 |---|---|---|
@@ -89,7 +72,6 @@ python -m pytest -q
 | `submission_fig4_ep_dp_r2.png` | E/P·D/P 포트폴리오 CAPM vs FF3F R² 비교 | Table 11 |
 | `submission_fig5_alpha_tests.png` | **5A**: 모형별 mean \|alpha\| 비교 / **5B**: 모형별 GRS F-stat 비교 | Table 9a, 9c |
 
-즉, 지금 README에 나오는 그림은 “연구용 전체 출력”이 아니라 **제출용 appendix 결과를 직접 시각화한 그림**이며, 모든 그림은 `§4`의 통합 요약표에서 해당 표와 직접 연결된다.
 
 ---
 
@@ -109,7 +91,7 @@ python -m pytest -q
 
 ---
 
-## 3. 논문의 어떤 부분을 어떻게 증명했는가
+## 3. 논문의 증명
 
 아래 표는 논문 주장, 구현 파일, 제출 파일, 그리고 무엇을 증명하는지의 연결표다.
 
@@ -126,7 +108,7 @@ python -m pytest -q
 
 ---
 
-## 3.1 표별로 어떻게 논문 주장을 증명했는가
+## 3.1 논문 증명 방법
 
 ### Table 1 — 25개 포트폴리오 형성 자체의 증명
 
@@ -243,81 +225,6 @@ python -m pytest -q
 
 ### 4.1 결과를 한 줄로 요약하면
 
-- **원자료 패턴**: Size 효과와 Value 효과가 실제로 존재한다.
+- **효과 증명**: Size 효과와 Value 효과가 실제로 존재한다.
 - **모형 비교**: CAPM보다 FF3F가 훨씬 잘 맞는다.
 - **추가 정렬 강건성**: E/P·D/P 정렬에서도 같은 결론이 반복된다.
-
-즉, 이번 제출 패키지는 **논문의 핵심 메시지인 “주식 수익률 설명의 중심은 3요인 구조”**를 표와 그림으로 일관되게 보여준다.
-
----
-
-## 5. 제외 표는 어떻게 처리했는가
-
-과제 가이드에서 제외 대상으로 명시한 항목은 `appendix_output/`에서 **아예 파일을 만들지 않았다**.
-
-예:
-
-- Table 3 전체
-- Table 4 bond block
-- Table 5 bond block
-- Table 6 bond block
-- Table 7a 전체
-- Table 7b
-- Table 8a 전체
-- Table 8b
-- Table 9a의 모형 (i), (v)
-- Table 9b
-- Table 10
-
-즉, 이번 제출 패키지는 “README에서만 숨긴” 구조가 아니라 **파일 수준에서 분리된 제출물**이다.
-
----
-
-## 6. 제출 시 직접 보면 되는 파일
-
-### 핵심 표 파일
-
-- `appendix_output/table1_panel1_firm_count_market_cap.csv`
-- `appendix_output/table1_panel2_cap_share_firm_count.csv`
-- `appendix_output/table2_panel1_factor_summary.csv`
-- `appendix_output/table2_panel1_correlation_matrix.csv`
-- `appendix_output/table2_panel2_stock_mean_std.csv`
-- `appendix_output/table2_panel3_stock_tstats.csv`
-- `appendix_output/table4_*`
-- `appendix_output/table5_*`
-- `appendix_output/table6_*`
-- `appendix_output/table9a_stock_alphas.csv`
-- `appendix_output/table9c_joint_tests.csv`
-- `appendix_output/table11_ep_dp_long.csv`
-
-### 지원 파일
-
-- `appendix_output/factors.csv`
-- `appendix_output/stock_portfolios_excess.csv`
-- `appendix_output/bond_portfolios_excess.csv`
-- `appendix_output/table11_ep_dp.csv`
-- `appendix_output/table0_descriptive_stats.csv`
-
-### 그림 파일
-
-- `appendix_output/submission_fig1_stock_mean_heatmap.png`
-- `appendix_output/submission_fig2_factor_premiums.png`
-- `appendix_output/submission_fig3_model_r2.png`
-- `appendix_output/submission_fig4_ep_dp_r2.png`
-- `appendix_output/submission_fig5_alpha_tests.png`
-
----
-
-## 7. 남은 주의사항
-
-1. Table 1 panel 3은 원천 25셀 E/P·D/P 구성 입력이 저장소에 없어, 가이드 기준 reference snapshot으로 제공한다.
-2. Table 9c는 F-distribution 기반 p-value와 residual bootstrap (B=999) 기반 확률 수준을 함께 제공한다. Bootstrap은 restricted model (H0: alpha=0)의 residuals를 시간 축에서 재추출하여 cross-sectional correlation을 보존했다.
-3. 채권 측은 proxy 기반이므로, 주식 측처럼 논문 원수치와 직접 비교하는 방식은 피해야 한다.
-
----
-
-## 8. 참고 문서
-
-- 과제 기준표: `Fama-French 1993 재현 및 정리.md`
-- 표 커버리지 감사: `TABLE_COVERAGE_AUDIT.md`
-- 제출 산출물 인덱스: `appendix_output/README.md`
