@@ -404,7 +404,11 @@ This directory contains assignment-facing tables derived from the repository out
 
 This directory is the canonical assignment submission output directory.
 """
-    (APPENDIX_DIR / "README.md").write_text(text, encoding="utf-8")
+    index_path = APPENDIX_DIR / "README.md"
+    if index_path.exists():
+        # 포맷된 한국어 인덱스(README.md)가 있으면 덮어쓰지 않는다.
+        return
+    index_path.write_text(text, encoding="utf-8")
 
 
 def main() -> None:

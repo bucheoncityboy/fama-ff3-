@@ -12,7 +12,7 @@ import pytest
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT_PATH = os.path.join(BASE_DIR, '01_section2_factors.py')
+SCRIPT_PATH = os.path.join(BASE_DIR, "src", "01_section2_factors.py")
 FACTORS_CSV = os.path.join(BASE_DIR, 'appendix_output', 'factors.csv')
 
 

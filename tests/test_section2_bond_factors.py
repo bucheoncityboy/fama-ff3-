@@ -24,7 +24,7 @@ def run_script():
     Run 01b_section2_bond_factors.py once and return the output path.
     This fixture executes the script as a module import side-effect.
     """
-    script_path = os.path.join(config.BASE_DIR, "01b_section2_bond_factors.py")
+    script_path = os.path.join(config.BASE_DIR, "src", "01b_section2_bond_factors.py")
     if not os.path.exists(script_path):
         pytest.fail(f"Script not found: {script_path}")
 
@@ -45,7 +45,7 @@ def run_script():
 
 def test_script_exists():
     """01b_section2_bond_factors.py exists in project root."""
-    script_path = os.path.join(config.BASE_DIR, "01b_section2_bond_factors.py")
+    script_path = os.path.join(config.BASE_DIR, "src", "01b_section2_bond_factors.py")
     assert os.path.exists(script_path), f"Expected {script_path} to exist"
 
 
@@ -103,7 +103,7 @@ def test_stock_factors_or_note(run_script):
 
 def test_disclaimer_in_source():
     """Disclaimer about yield-based proxy limitations is present in module source."""
-    script_path = os.path.join(config.BASE_DIR, "01b_section2_bond_factors.py")
+    script_path = os.path.join(config.BASE_DIR, "src", "01b_section2_bond_factors.py")
     source = open(script_path, "r", encoding="utf-8").read()
     assert "yield-based" in source.lower(), "Missing yield-based disclaimer"
     assert "proxy" in source.lower(), "Missing proxy disclaimer"
@@ -130,7 +130,7 @@ def test_disclaimer_in_output(run_script):
 
 def test_summary_statistics_printed(capsys):
     """Script prints bond factor summary statistics (mean, std, t-stat)."""
-    script_path = os.path.join(config.BASE_DIR, "01b_section2_bond_factors.py")
+    script_path = os.path.join(config.BASE_DIR, "src", "01b_section2_bond_factors.py")
     import importlib.util
     spec = importlib.util.spec_from_file_location("section2_bond_factors_test", script_path)
     mod = importlib.util.module_from_spec(spec)

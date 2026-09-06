@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from data_loader import load_factors
 import regression_engine as re
 
 # ---------------------------------------------------------------------------
@@ -78,24 +79,6 @@ def load_ep_dp_returns() -> pd.DataFrame:
     df.index = pd.to_datetime(df.index)
     print(f"Loaded EP/DP portfolios: {df.shape}")
     return df
-
-
-def load_factors() -> pd.DataFrame:
-    """Load combined factors including RF."""
-    path = os.path.join(config.OUTPUT_DIR, "factors.csv")
-    df = pd.read_csv(path, comment="#", index_col=0, parse_dates=True)
-    df.index = pd.to_datetime(df.index)
-    # TERM and DEF are in decimal; convert to % for consistency
-    for col in ("TERM", "DEF"):
-        if col in df.columns:
-            df[col] = df[col] * 100.0
-    print(f"Loaded factors: {df.shape}")
-    return df
-
-
-# ---------------------------------------------------------------------------
-# Descriptive statistics (Panel 1) — use raw returns
-# ---------------------------------------------------------------------------
 
 
 def compute_descriptive_stats(returns_df: pd.DataFrame) -> pd.DataFrame:

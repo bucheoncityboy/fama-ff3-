@@ -3,8 +3,13 @@ conftest.py
 Shared pytest fixtures for Fama-French replication tests
 """
 
-import pytest
 import os
+import sys
+
+import pytest
+
+# src/ 모듈(config·data_loader·regression_engine 등)을 import 할 수 있게 경로 추가
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 
 @pytest.fixture

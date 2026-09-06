@@ -27,6 +27,7 @@ import sys
 import pandas as pd
 
 import config
+from data_loader import load_factors, load_stock_portfolios, load_bond_portfolios
 import regression_engine as re
 
 # ---------------------------------------------------------------------------
@@ -139,44 +140,6 @@ def _ensure_bond_data() -> None:
             text=True,
             cwd=base_dir,
         )
-
-
-def load_stock_portfolios() -> pd.DataFrame:
-    """Load 25 stock portfolio excess returns (already in %)."""
-    path = os.path.join(config.OUTPUT_DIR, "stock_portfolios_excess.csv")
-    df = pd.read_csv(path, index_col=0, parse_dates=True)
-    df.index = pd.to_datetime(df.index)
-    print("Loaded stock portfolios: %s" % str(df.shape))
-    return df
-
-
-def load_bond_portfolios() -> pd.DataFrame:
-    """Load 7 bond portfolio excess returns (decimal) and convert to %."""
-    path = os.path.join(config.OUTPUT_DIR, "bond_portfolios_excess.csv")
-    df = pd.read_csv(path, index_col=0, parse_dates=True)
-    df.index = pd.to_datetime(df.index)
-    df = df * 100.0
-    print("Loaded bond portfolios: %s (converted to %%)" % str(df.shape))
-    return df
-
-
-def load_factors() -> pd.DataFrame:
-    """Load combined factors. Handle comment line in CSV."""
-    path = os.path.join(config.OUTPUT_DIR, "factors.csv")
-    df = pd.read_csv(path, comment="#", index_col=0, parse_dates=True)
-    df.index = pd.to_datetime(df.index)
-
-    for col in ("TERM", "DEF"):
-        if col in df.columns:
-            df[col] = df[col] * 100.0
-
-    print("Loaded factors: %s" % str(df.shape))
-    return df
-
-
-# ---------------------------------------------------------------------------
-# Regression runner
-# ---------------------------------------------------------------------------
 
 
 def _portfolio_type(name: str) -> str:

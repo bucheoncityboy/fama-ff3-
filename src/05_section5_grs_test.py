@@ -29,6 +29,7 @@ import statsmodels.api as sm
 from scipy import stats
 
 import config
+from data_loader import load_factors, load_stock_portfolios
 import regression_engine as re
 
 # ---------------------------------------------------------------------------
@@ -57,14 +58,6 @@ def _normalize_monthly_index(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_stock_portfolios() -> pd.DataFrame:
-    """Load 25 stock portfolio excess returns (already in %)."""
-    path = os.path.join(config.OUTPUT_DIR, "stock_portfolios_excess.csv")
-    df = pd.read_csv(path, index_col=0, parse_dates=True)
-    df = _normalize_monthly_index(df)
-    return df
-
-
 def load_bond_portfolios() -> pd.DataFrame:
     """Load 7 bond portfolio excess returns (decimal) and convert to %."""
     path = os.path.join(config.OUTPUT_DIR, "bond_portfolios_excess.csv")
@@ -72,22 +65,6 @@ def load_bond_portfolios() -> pd.DataFrame:
     df = _normalize_monthly_index(df)
     df = df * 100.0
     return df
-
-
-def load_factors() -> pd.DataFrame:
-    """Load combined factors. Handle comment line in CSV."""
-    path = os.path.join(config.OUTPUT_DIR, "factors.csv")
-    df = pd.read_csv(path, comment="#", index_col=0, parse_dates=True)
-    df = _normalize_monthly_index(df)
-    for col in ("TERM", "DEF"):
-        if col in df.columns:
-            df[col] = df[col] * 100.0
-    return df
-
-
-# ---------------------------------------------------------------------------
-# Regression helpers for GRS test
-# ---------------------------------------------------------------------------
 
 
 def run_regression_for_grs(

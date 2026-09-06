@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT_PATH = os.path.join(BASE_DIR, "04b_section4_five_factor.py")
+SCRIPT_PATH = os.path.join(BASE_DIR, "src", "04b_section4_five_factor.py")
 TABLE5_CSV = os.path.join(BASE_DIR, "appendix_output", "table5_five_factor.csv")
 
 STOCK_COLS = [

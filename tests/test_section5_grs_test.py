@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT_PATH = os.path.join(BASE_DIR, "05_section5_grs_test.py")
+SCRIPT_PATH = os.path.join(BASE_DIR, "src", "05_section5_grs_test.py")
 GRS_CSV = os.path.join(BASE_DIR, "appendix_output", "grs_test_results.csv")
 
 

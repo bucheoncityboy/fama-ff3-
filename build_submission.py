@@ -67,8 +67,9 @@ def remove_legacy_outputs() -> None:
 def main() -> None:
     remove_legacy_outputs()
     for script in SCRIPTS:
+        script_path = ROOT / "src" / script
         print(f"Running {script}...")
-        result = subprocess.run([sys.executable, script], cwd=ROOT)
+        result = subprocess.run([sys.executable, str(script_path)], cwd=ROOT)
         if result.returncode != 0:
             raise SystemExit(result.returncode)
     remove_legacy_outputs()

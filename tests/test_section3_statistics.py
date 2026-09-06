@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT_PATH = os.path.join(BASE_DIR, "03_section3_statistics.py")
+SCRIPT_PATH = os.path.join(BASE_DIR, "src", "03_section3_statistics.py")
 SUMMARY_CSV = os.path.join(BASE_DIR, "appendix_output", "table2_summary.csv")
 
 # Expected stock column order for 5x5 grid

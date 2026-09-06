@@ -13,7 +13,7 @@ import sys
 import pytest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT_PATH = os.path.join(BASE_DIR, "06_section6_visualizations.py")
+SCRIPT_PATH = os.path.join(BASE_DIR, "src", "06_section6_visualizations.py")
 OUTPUT_DIR = os.path.join(BASE_DIR, "appendix_output")
 
 FIGURE_FILES = {

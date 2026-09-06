@@ -2037,8 +2037,9 @@ def _overlay_archived_self_constructed(
     columns: List[str],
 ) -> pd.DataFrame:
     """Overlay archived self-constructed CRSP outputs when available."""
+    import config  # 저장소 루트 기준 crsp/ 아카이브 (src/ 가 아닌 루트에 위치)
     archive_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
+        config.BASE_DIR,
         'crsp',
         'FF1993_results',
         'data',
